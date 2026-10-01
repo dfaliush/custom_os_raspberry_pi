@@ -1,0 +1,7 @@
+[Match]
+Name=wlan0
+
+[Network]
+DHCP=ipv4
+# No 169.254.x.x when DHCP fails: it would look like a network to the fallback check.
+LinkLocalAddressing=no

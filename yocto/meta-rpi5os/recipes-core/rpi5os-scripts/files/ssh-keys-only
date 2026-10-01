@@ -1,0 +1,27 @@
+#!/bin/sh
+#
+# ssh-keys-only: disable SSH password login, keep key login only.
+#
+# Refuses unless the sudo caller has a key in ~/.ssh/authorized_keys,
+# otherwise nobody could log in afterwards.
+
+set -eu
+
+CONF=/etc/ssh/sshd_config.d/10-rpi5os.conf
+USER_NAME="${SUDO_USER:-}"
+
+if [ "$(id -u)" -ne 0 ] || [ -z "$USER_NAME" ]; then
+	echo "Запускай як: sudo ssh-keys-only" >&2
+	exit 1
+fi
+
+HOME_DIR=$(awk -F: -v u="$USER_NAME" '$1 == u {print $6}' /etc/passwd)
+KEYS="${HOME_DIR}/.ssh/authorized_keys"
+if ! grep -qE '^(ssh-|ecdsa-|sk-)' "$KEYS" 2>/dev/null; then
+	echo "У ${KEYS} немає жодного ключа. Спершу ssh-copy-id, потім перевір вхід за ключем." >&2
+	exit 1
+fi
+
+sed -i 's/^PasswordAuthentication yes$/PasswordAuthentication no/' "$CONF"
+# sshd.socket starts a fresh sshd per connection, which reads the new config.
+echo "Готово: вхід за паролем вимкнено, лишились ключі з ${KEYS}."

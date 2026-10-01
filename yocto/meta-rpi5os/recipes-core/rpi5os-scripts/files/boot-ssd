@@ -1,0 +1,25 @@
+#!/bin/sh
+#
+# boot-ssd: make this SD unbootable so the Pi boots from the SSD after reboot.
+#
+# Boot files (config.txt, kernel_2712.img, *.dtb, ...) move to /boot/disabled/.
+# Without them the bootloader treats the SD as empty and goes on along BOOT_ORDER.
+# Undo: buildroot/scripts/pi/sd-boot.sh on (from Raspberry Pi OS on the SSD).
+
+set -eu
+
+B=/boot
+mountpoint -q "$B" || mount "$B"
+mkdir -p "$B/disabled"
+
+for f in "$B"/*; do
+	[ -f "$f" ] || continue
+	case "$(basename "$f")" in
+		# Same list as KEEP_RE in buildroot/scripts/pi/sd-boot.sh.
+		rpi5os-boot.log|no-fallback|userconf.txt|wpa_supplicant.conf|*.example) ;;
+		*) mv "$f" "$B/disabled/" ;;
+	esac
+done
+sync
+
+echo "SD-завантаження вимкнено. Після reboot Pi стартує з SSD."

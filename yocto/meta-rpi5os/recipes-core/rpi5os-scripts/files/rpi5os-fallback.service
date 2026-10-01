@@ -1,0 +1,11 @@
+[Unit]
+Description=rpi5os: back to the SSD if there is no network in 3 minutes
+RequiresMountsFor=/boot
+After=rpi5os-bootcfg.service
+
+[Service]
+Type=simple
+ExecStart=/usr/lib/rpi5os/fallback.sh
+
+[Install]
+WantedBy=multi-user.target

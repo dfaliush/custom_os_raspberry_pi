@@ -286,6 +286,85 @@ ssh -o BatchMode=yes user@rpi5os.local true; if ($?) { ssh -t user@rpi5os.local 
 `ssh-keys-only` відмовиться, якщо `authorized_keys` порожній: так неможливо
 відрізати собі доступ. Далі вхід лише за ключем: `ssh user@rpi5os.local`.
 
+## Yocto-образ (ітерація 2)
+
+Та сама ОС, зібрана через Yocto 6.0 «Wrynose» (тека `yocto/`, рішення в
+[`docs/specs/2026-10-01-yocto-design.md`](docs/specs/2026-10-01-yocto-design.md)).
+Для користувача все так само, як вище, крім трьох речей:
+
+| Що | Buildroot | Yocto |
+| --- | --- | --- |
+| файл релізу | `rpi5os-buildroot-v1.0.0-sdcard.img.xz` | `rpi5os-yocto-v1.0.0-sdcard.img.xz` |
+| тег релізу | `buildroot-v1.0.0` | `yocto-v1.0.0` |
+| адреса в мережі | `rpi5os.local` | `rpi5os-yocto.local` |
+
+Тобто в командах розділів «Встановити готовий образ», «Raspberry Pi OS уже на
+SSD» і «Перший вхід» підстав ці імена. Мітка FAT (`RPI5OS-BOOT`), файли
+`userconf.txt` і `wpa_supplicant.conf`, `ssh-keys-only`, `boot-ssd`, автовідкат
+і скрипти `flash-sd.sh` / `sd-boot.sh` / `boot-order.sh` — ті самі.
+
+**Перший вхід у Yocto-образ.** Ті самі кроки, що в розділі «Перший вхід»,
+тільки з `rpi5os-yocto.local`. `ssh-keygen -R` не потрібен, якщо раніше на
+цьому hostname нічого не стояло.
+
+```bash
+ssh user@rpi5os-yocto.local                 # 1. пароль з userconf.txt
+exit                                        #    обов'язково: кроки 2–3 виконуються на ПК, не на Pi
+```
+
+2–3 у cmd (у PowerShell замість `%USERPROFILE%` пиши `$env:USERPROFILE`, а
+замість `&&` — `; if ($?) { … }`):
+
+```cmd
+type %USERPROFILE%\.ssh\id_ed25519.pub | ssh user@rpi5os-yocto.local "mkdir -p ~/.ssh && chmod 700 ~/.ssh && cat >> ~/.ssh/authorized_keys"
+ssh -o BatchMode=yes user@rpi5os-yocto.local true && ssh -t user@rpi5os-yocto.local sudo ssh-keys-only
+```
+
+Ubuntu / macOS: `ssh-copy-id user@rpi5os-yocto.local`, потім другий рядок.
+
+> Якщо друга команда питає пароль або пише `Permission denied (publickey…)`,
+> ключ не дописався. Найчастіше причина в тому, що крок 2 виконали в сесії на
+> самій Pi, а не на ПК: тоді в `~/.ssh/authorized_keys` лежить рядок на
+> кшталт `%USERPROFILE%.sshid_ed25519.pub: not found`. Перевір:
+> `ssh user@rpi5os-yocto.local cat .ssh/authorized_keys`. Виправити можна,
+> записавши ключ напряму:
+> `ssh user@rpi5os-yocto.local "echo 'ssh-ed25519 AAAA… коментар' > ~/.ssh/authorized_keys"`
+> (вміст свого `id_ed25519.pub`).
+
+Як перевірити, що запущено саме Yocto-образ:
+
+```bash
+ssh user@rpi5os-yocto.local 'grep -E "^NAME|VERSION_ID|IMAGE_ID" /etc/os-release; uname -r; systemctl is-system-running'
+# NAME=rpi5os, VERSION_ID=1.0.0, IMAGE_ID=rpi5os-yocto, kernel 6.18.x, running
+```
+
+Тут systemd, тож доступні `systemctl`, `journalctl -b` і `networkctl`.
+
+**Зібрати** (перший раз кілька годин і ~100–150 ГБ на ext4, далі
+інкрементально):
+
+```bash
+sudo apt install gawk wget git diffstat unzip texinfo gcc build-essential chrpath socat cpio \
+	python3 python3-pip python3-pexpect xz-utils debianutils iputils-ping python3-git \
+	python3-jinja2 python3-subunit zstd liblz4-tool file locales libacl1
+```
+
+```powershell
+wsl -d Ubuntu -- bash yocto/scripts/build.sh
+wsl -d Ubuntu -- bash yocto/scripts/dist.sh
+```
+
+`build.sh` бере `openembedded-core` і `bitbake` на тегу `yocto-6.0.3`,
+`meta-raspberrypi` на прибитому коміті, копіює `yocto/meta-rpi5os` у
+`~/yocto/layers` і запускає `bitbake rpi5os-image`. Образ:
+`~/yocto/build/tmp/deploy/images/raspberrypi5/rpi5os-image-raspberrypi5.rootfs.wic`,
+артефакти релізу — у `~/yocto/dist/`: `.img.xz`, `SHA256SUMS`, `layers.txt`
+(ревізії шарів і `local.conf`), `license.manifest`, `.spdx.json` (SBOM).
+
+Пастки, на які натрапили з Yocto (firmware Wi-Fi поза `IMAGE_INSTALL`, цикл
+systemd, локаль для bitbake), і результати T1–T7 на залізі — у spec, розділи
+«Знайдено під час реалізації» і «Результати на залізі».
+
 ## Стенд
 
 | Що | Деталі |
@@ -300,7 +379,10 @@ ssh -o BatchMode=yes user@rpi5os.local true; if ($?) { ssh -t user@rpi5os.local 
 
 ```text
 custom_os_raspberry_pi/
-├─ docs/specs/                    # дизайн
+├─ docs/specs/                    # дизайн обох ітерацій
+├─ yocto/                         # ітерація 2, див. «Yocto-образ»
+│  ├─ meta-rpi5os/                # шар: distro rpi5os, rpi5os-image, скрипти й systemd units
+│  └─ scripts/build.sh, dist.sh   # WSL: від нуля до .wic і артефакти релізу
 └─ buildroot/                     # BR2_EXTERNAL, name: RPI5OS
    ├─ configs/rpi5os_defconfig    # raspberrypi5_defconfig + наші зміни (розмічено в файлі)
    ├─ VERSION                     # версія образу → /etc/os-release, ім'я релізу

@@ -1,0 +1,13 @@
+# Copy to wpa_supplicant.conf (drop .example) and fill in your network.
+# On boot rpi5os moves it to /etc/wpa_supplicant.conf (mode 600) and deletes it
+# here: FAT has no permissions, so the password must not stay on it.
+ctrl_interface=/var/run/wpa_supplicant
+update_config=0
+# Required for 5 GHz: without a country some channels stay disabled.
+country=UA
+
+network={
+	ssid="MyNetwork"
+	psk="my-wifi-password"
+	key_mgmt=WPA-PSK
+}

@@ -1,0 +1,17 @@
+[Unit]
+Description=rpi5os: user and Wi-Fi from the boot partition
+# Early, right after the file systems: with the default dependencies (After=basic.target)
+# the ordering before sshd.socket forms a cycle through sockets.target.
+DefaultDependencies=no
+RequiresMountsFor=/boot
+After=local-fs.target
+Before=sockets.target sshd.socket wpa_supplicant-nl80211@wlan0.service systemd-user-sessions.service shutdown.target
+Conflicts=shutdown.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/rpi5os/bootcfg.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=sysinit.target

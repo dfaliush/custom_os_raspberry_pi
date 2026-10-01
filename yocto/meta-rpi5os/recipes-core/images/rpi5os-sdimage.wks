@@ -1,0 +1,5 @@
+# meta-raspberrypi's sdimage-raspberrypi.wks with the RPI5OS-BOOT label (same as
+# the Buildroot image) and umask=0077: FAT has no permissions, and userconf.txt
+# and wpa_supplicant.conf land on it.
+part /boot --source bootimg-partition --ondisk mmcblk0 --fstype=vfat --label RPI5OS-BOOT --active --align 4096 --size 100 --fsoptions "defaults,noatime,umask=0077"
+part / --source rootfs --ondisk mmcblk0 --fstype=ext4 --label root --align 4096
