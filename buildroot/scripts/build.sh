@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
 #
-# Збірка rpi5os у WSL / Linux. Один виклик від нуля до sdcard.img:
+# Build rpi5os in WSL / Linux, from scratch to sdcard.img. From the repo root:
 #
-#   wsl -d Ubuntu -- bash /mnt/d/git/custom_os_raspberry_pi/buildroot/scripts/build.sh
+#   wsl -d Ubuntu -- bash buildroot/scripts/build.sh
 #
-# Робоча тека (сирці Buildroot, output) — RPI5OS_WORK, за замовчуванням ~/br.
-# Вона має бути на ext4: на /mnt/<диск> збірка ламається на регістрі імен і правах.
+# Work dir (Buildroot sources, output) is RPI5OS_WORK, ~/br by default. It must
+# be on ext4: on /mnt/<drive> the build breaks on name case and permissions.
 
 set -euo pipefail
 
 BR_VERSION=2026.02.3
 BR_URL=https://gitlab.com/buildroot.org/buildroot.git
 
-SRC="$(cd "$(dirname "$0")/.." && pwd)"    # buildroot/ у репо = BR2_EXTERNAL
+SRC="$(cd "$(dirname "$0")/.." && pwd)"    # buildroot/ in the repo = BR2_EXTERNAL
 WORK="${RPI5OS_WORK:-$HOME/br}"
 EXT="$WORK/external"
 OUT="$WORK/output"
@@ -22,20 +22,19 @@ case "$WORK" in
 esac
 mkdir -p "$WORK"
 
-# WSL дописує в PATH теки Windows ("/mnt/c/Program Files/..."). Buildroot
-# відмовляється працювати з пробілами в PATH, та й Windows-утиліти збірці не потрібні.
+# WSL appends Windows dirs to PATH ("/mnt/c/Program Files/..."). Buildroot
+# refuses a PATH with spaces, and the build needs no Windows tools anyway.
 PATH="$(printf '%s' "$PATH" | tr ':' '\n' | grep -v '^/mnt/' | paste -sd:)"
 export PATH
 
-# 1. BR2_EXTERNAL копією на ext4 з явними правами. З /mnt/d (drvfs) права
-#    читаються як попало, а overlay переносить їх у rootfs як є.
+# Copy BR2_EXTERNAL to ext4 with explicit modes: drvfs reports arbitrary
+# modes, and the overlay carries them into rootfs as is.
 rsync -a --delete --no-perms --chmod=D755,F644 "$SRC/" "$EXT/"
 chmod 755 "$EXT"/board/rpi5os/*.sh \
           "$EXT"/board/rpi5os/rootfs-overlay/etc/init.d/* \
           "$EXT"/board/rpi5os/rootfs-overlay/usr/sbin/* \
           "$EXT"/scripts/*.sh
 
-# 2. Buildroot рівно на потрібному тезі.
 if [ ! -d "$WORK/buildroot/.git" ]; then
 	git clone --depth 1 --branch "$BR_VERSION" "$BR_URL" "$WORK/buildroot"
 fi
@@ -45,7 +44,6 @@ if [ "$have" != "$BR_VERSION" ]; then
 	exit 1
 fi
 
-# 3. Конфіг і збірка.
 make -C "$WORK/buildroot" BR2_EXTERNAL="$EXT" O="$OUT" rpi5os_defconfig
 make -C "$WORK/buildroot" O="$OUT"
 

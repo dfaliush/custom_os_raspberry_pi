@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 #
-# boot-order.sh sd-first|restore|show: порядок завантаження в EEPROM Pi 5.
-# Запускається на Raspberry Pi OS через sudo.
+# boot-order.sh sd-first|restore|show: Pi 5 EEPROM boot order.
+# Run on Raspberry Pi OS with sudo.
 #
-#   sd-first → BOOT_ORDER=0xf461: SD → NVMe → USB. З вимкненою або вийнятою
-#              SD Pi сама йде на NVMe.
-#   restore  → повертає конфіг, збережений перед першим sd-first.
+#   sd-first → BOOT_ORDER=0xf461: SD → NVMe → USB. With the SD disabled or
+#              removed the Pi boots from NVMe.
+#   restore  → reapply the config saved before the first sd-first.
 #
-# Зміна набуває сили після reboot: rpi-eeprom-config --apply кладе
-# pieeprom.upd/.sig і recovery.bin у /boot/firmware, bootloader прошиває EEPROM
-# і перейменовує recovery.bin. Інших змін на SSD немає.
+# Takes effect after reboot: rpi-eeprom-config --apply puts pieeprom.upd/.sig
+# and recovery.bin in /boot/firmware, the bootloader flashes the EEPROM and
+# renames recovery.bin. Nothing else on the SSD changes.
 
 set -euo pipefail
 

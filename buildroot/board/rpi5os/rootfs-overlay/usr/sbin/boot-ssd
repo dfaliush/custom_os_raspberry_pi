@@ -1,10 +1,10 @@
 #!/bin/sh
 #
-# boot-ssd: зробити цю SD незавантажувальною, щоб після reboot Pi пішла на SSD.
+# boot-ssd: make this SD unbootable so the Pi boots from the SSD after reboot.
 #
-# Boot-файли (config.txt, Image, *.dtb, ...) переносяться в /boot/disabled/.
-# Без них bootloader вважає SD порожньою і йде далі по BOOT_ORDER.
-# Повернути: scripts/pi/sd-boot.sh on (з Raspberry Pi OS на SSD).
+# Boot files (config.txt, Image, *.dtb, ...) move to /boot/disabled/. Without
+# them the bootloader treats the SD as empty and goes on along BOOT_ORDER.
+# Undo: scripts/pi/sd-boot.sh on (from Raspberry Pi OS on the SSD).
 
 set -eu
 
@@ -15,7 +15,7 @@ mkdir -p "$B/disabled"
 for f in "$B"/*; do
 	[ -f "$f" ] || continue
 	case "$(basename "$f")" in
-		# Той самий список, що KEEP_RE у scripts/pi/sd-boot.sh.
+		# Same list as KEEP_RE in scripts/pi/sd-boot.sh.
 		rpi5os-boot.log|no-fallback|userconf.txt|wpa_supplicant.conf|*.example) ;;
 		*) mv "$f" "$B/disabled/" ;;
 	esac

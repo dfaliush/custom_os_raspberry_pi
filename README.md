@@ -73,8 +73,8 @@ sudo apt install build-essential unzip bc libncurses-dev rsync cpio file wget gi
 Збірка (перший раз ~30–60 хв, далі інкрементально):
 
 ```powershell
-wsl -d Ubuntu -- bash /mnt/d/git/custom_os_raspberry_pi/buildroot/scripts/build.sh
-wsl -d Ubuntu -- bash /mnt/d/git/custom_os_raspberry_pi/buildroot/scripts/dist.sh
+wsl -d Ubuntu -- bash buildroot/scripts/build.sh
+wsl -d Ubuntu -- bash buildroot/scripts/dist.sh
 ```
 
 `build.sh` копіює `buildroot/` у `~/br/external` (на ext4, з явними правами),
@@ -134,7 +134,7 @@ printf 'user:%s\n' "$(openssl passwd -6)" > /dev/shm/rpi5os-userconf.txt
 **2. Запис** (Git Bash):
 
 ```bash
-bash buildroot/scripts/flash-to-pi.sh //wsl.localhost/Ubuntu/home/user/br/dist/rpi5os-buildroot-v1.0.0-sdcard.img.xz
+bash buildroot/scripts/flash-to-pi.sh //wsl.localhost/Ubuntu/home/<user>/br/dist/rpi5os-buildroot-v1.0.0-sdcard.img.xz
 ```
 
 `flash-sd.sh` на Pi перевіряє, що ціль — справді microSD (`TRAN=mmc`, не
@@ -165,7 +165,6 @@ type $env:USERPROFILE\.ssh\id_ed25519.pub | ssh user@rpi5os.local "mkdir -p ~/.s
 
 > Якщо `type … | ssh` у PowerShell 5.1 нічого не дописав (файл лишився
 > порожнім) — встав ключ прямо в команду: `ssh … "echo 'ssh-ed25519 AAAA…' >> ~/.ssh/authorized_keys"`.
-> Саме так і було на `raspberrypi`.
 
 Перевірити вхід за ключем і вимкнути паролі:
 

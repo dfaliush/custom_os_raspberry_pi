@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 #
-# flash-to-pi.sh IMAGE.img.xz [HOST]: записати rpi5os на microSD Pi по ssh.
-# Запускається з Git Bash на Windows (там ключі ~/.ssh для HOST):
+# flash-to-pi.sh IMAGE.img.xz [HOST]: write rpi5os to the Pi's microSD over ssh.
+# Run from Git Bash on Windows, where the ~/.ssh keys for HOST are:
 #
-#   bash buildroot/scripts/flash-to-pi.sh //wsl.localhost/Ubuntu/home/user/br/dist/rpi5os-buildroot-v1.0.0-sdcard.img.xz
+#   bash buildroot/scripts/flash-to-pi.sh //wsl.localhost/Ubuntu/home/<user>/br/dist/rpi5os-buildroot-v1.0.0-sdcard.img.xz
 #
-# Перед цим на Pi має лежати /dev/shm/rpi5os-userconf.txt (див. README).
-# Усе копіюється в /dev/shm (RAM): на SSD Pi нічого не пишеться.
+# The Pi must already have /dev/shm/rpi5os-userconf.txt (see README).
+# Everything goes to /dev/shm (RAM), nothing is written to the Pi's SSD.
 
 set -euo pipefail
 

@@ -1,5 +1,5 @@
-# Як board/raspberrypi/genimage.cfg.in з Buildroot, але boot-розділ 64M
-# замість 32M: туди ще пишуться лог, приклади конфігів і тека disabled/.
+# Buildroot's board/raspberrypi/genimage.cfg.in with a 64M boot partition
+# instead of 32M: it also holds the boot log, example configs and disabled/.
 image boot.vfat {
 	vfat {
 		label = "RPI5OS-BOOT"

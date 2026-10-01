@@ -1,11 +1,11 @@
 #!/bin/sh
 #
-# S30bootcfg: підхоплює налаштування з FAT-розділу /boot.
+# S30bootcfg: apply settings from the /boot FAT partition, then delete them.
 #
-#   /boot/userconf.txt        "ім'я:hash" → користувач у групі wheel, файл видаляється
-#   /boot/wpa_supplicant.conf → /etc/wpa_supplicant.conf (600), файл видаляється
+#   /boot/userconf.txt        "name:hash" → user in group wheel
+#   /boot/wpa_supplicant.conf → /etc/wpa_supplicant.conf (600)
 #
-# В образі немає ні користувачів, ні пароля Wi-Fi: їх дає той, хто записав SD.
+# The image has no users and no Wi-Fi password: whoever flashes the SD adds them.
 
 . /usr/lib/rpi5os/common.sh
 
@@ -22,25 +22,25 @@ apply_userconf() {
 	case "$name" in
 		''|*[!a-z0-9_-]*) log "userconf: погане ім'я користувача, пропускаю"; return 1 ;;
 	esac
-	# Тільки sha256/sha512-crypt: їх точно розуміє crypt() у sshd і sudo.
+	# Only sha256/sha512-crypt, which crypt() in sshd and sudo surely supports.
 	case "$hash" in
 		'$5$'*|'$6$'*) ;;
 		*) log "userconf: hash має бути з 'openssl passwd -6', пропускаю"; return 1 ;;
 	esac
 
 	grep -q "^${name}:" /etc/passwd || adduser -D -h "/home/${name}" -s /bin/sh "$name"
-	# adduser не створює home, якщо його не вийшло з першого разу: робимо явно.
+	# adduser won't create home if it failed the first time, so do it explicitly.
 	mkdir -p "/home/${name}"
 	chown "${name}:" "/home/${name}"
 	chmod 700 "/home/${name}"
 
-	# "addgroup user wheel" у нашому BusyBox не працює (FEATURE_ADDUSER_TO_GROUP
-	# вимкнено), тому дописуємо в /etc/group напряму: "wheel:x:10:root" → "...:root,user".
+	# "addgroup user wheel" fails in this BusyBox (FEATURE_ADDUSER_TO_GROUP is off),
+	# so edit /etc/group directly: "wheel:x:10:root" → "...:root,user".
 	if ! grep -qE "^wheel:[^:]*:[^:]*:(.*,)?${name}(,|$)" /etc/group; then
 		sed -i -E "s/^(wheel:[^:]*:[^:]*:)(.+)$/\1\2,${name}/; s/^(wheel:[^:]*:[^:]*:)$/\1${name}/" /etc/group
 	fi
 
-	# У crypt-алфавіті немає '|', '&' і '\', тож hash безпечно підставляти в sed.
+	# The crypt alphabet has no '|', '&' or '\', so the hash is safe in sed.
 	sed -i "s|^${name}:[^:]*:|${name}:${hash}:|" /etc/shadow
 
 	if grep -qE "^wheel:.*[:,]${name}(,|$)" /etc/group && [ -d "/home/${name}" ]; then

@@ -2,9 +2,9 @@
 #
 # S41wifi: wlan0 → wpa_supplicant → DHCP (busybox udhcpc).
 #
-# Не через ifupdown: "inet dhcp" там запускає udhcpc з -n (здатися, якщо
-# lease не прийшов за кілька спроб), а асоціація з точкою доступу буває
-# довшою. Тут udhcpc іде у фон (-b) і пробує, доки не отримає адресу.
+# Not via ifupdown: its "inet dhcp" runs udhcpc -n, which gives up after a few
+# tries, and association can take longer. Here udhcpc goes to the background
+# (-b) and retries until it gets a lease.
 
 . /usr/lib/rpi5os/common.sh
 
@@ -19,7 +19,7 @@ start() {
 		return 1
 	fi
 
-	# eudev підвантажує brcmfmac сам; modprobe тут лише страховка.
+	# eudev loads brcmfmac itself; modprobe is only a fallback.
 	i=0
 	while [ ! -d /sys/class/net/$IFACE ] && [ $i -lt 20 ]; do
 		[ $i -eq 5 ] && modprobe brcmfmac

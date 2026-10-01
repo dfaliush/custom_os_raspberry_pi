@@ -1,9 +1,9 @@
 #!/bin/sh
 #
-# ssh-keys-only: вимкнути вхід по SSH за паролем, лишити тільки ключі.
+# ssh-keys-only: disable SSH password login, keep key login only.
 #
-# Перед цим перевіряє, що в користувача, який викликав sudo, є непорожній
-# ~/.ssh/authorized_keys: інакше після reload у систему вже не зайти.
+# Refuses unless the sudo caller has a key in ~/.ssh/authorized_keys,
+# otherwise nobody could log in after the reload.
 
 set -eu
 

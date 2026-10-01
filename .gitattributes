@@ -1,2 +1,2 @@
-# Усе тут виконується в Linux (WSL, Buildroot, Pi): LF незалежно від core.autocrlf.
+# Everything here runs on Linux (WSL, Buildroot, Pi): LF regardless of core.autocrlf.
 * text eol=lf

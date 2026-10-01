@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 #
-# dist.sh: артефакти релізу з готової збірки (у WSL, після build.sh).
+# dist.sh: release artifacts from a finished build (WSL, after build.sh).
 #
 #   ~/br/dist/rpi5os-buildroot-v<VERSION>-sdcard.img.xz
-#   ~/br/dist/buildroot.config            повний .config
-#   ~/br/dist/legal-info-manifest.csv     пакети, версії, ліцензії (make legal-info)
+#   ~/br/dist/buildroot.config            full .config
+#   ~/br/dist/legal-info-manifest.csv     packages, versions, licenses (make legal-info)
 #   ~/br/dist/SHA256SUMS
 
 set -euo pipefail

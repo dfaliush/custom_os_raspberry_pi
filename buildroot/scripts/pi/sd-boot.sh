@@ -1,25 +1,25 @@
 #!/usr/bin/env bash
 #
-# sd-boot.sh on|off|status: запускається на Raspberry Pi OS (з SSD) і вмикає
-# або вимикає завантаження з microSD, не чіпаючи SSD.
+# sd-boot.sh on|off|status: run on Raspberry Pi OS (booted from SSD) to enable
+# or disable booting from microSD without touching the SSD.
 #
-#   off → boot-файли SD переносяться в disabled/: bootloader вважає SD
-#         порожньою і йде далі по BOOT_ORDER (на NVMe)
-#   on  → файли повертаються, при наступному reboot стартує rpi5os
+#   off → SD boot files move to disabled/: the bootloader treats the SD as
+#         empty and goes on along BOOT_ORDER (to NVMe)
+#   on  → files move back, rpi5os starts on the next reboot
 #
-# Дзеркало usr/sbin/boot-ssd з образу: той вимикає SD зсередини rpi5os.
+# Counterpart of usr/sbin/boot-ssd, which disables the SD from inside rpi5os.
 
 set -euo pipefail
 
 PART=/dev/mmcblk0p1
 MNT=/mnt/rpi5os-boot
-# Те, що не є boot-файлами: лишається на місці при off.
+# Not boot files: left in place by off.
 KEEP_RE='^(rpi5os-boot\.log|no-fallback|userconf\.txt|wpa_supplicant\.conf|.*\.example)$'
 
 [ "$(id -u)" -eq 0 ] || { echo "Запускай через sudo" >&2; exit 1; }
 [ -b "$PART" ] || { echo "Немає $PART: microSD не вставлена?" >&2; exit 1; }
 
-# Ніколи не працюємо з розділом, з якого живе поточна система.
+# Never touch the partition the running system lives on.
 for m in / /boot/firmware; do
 	if [ "$(findmnt -no SOURCE "$m" 2>/dev/null)" = "$PART" ]; then
 		echo "$PART змонтовано як $m: це робоча система, зупиняюсь" >&2

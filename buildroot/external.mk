@@ -1,3 +1,2 @@
-# Власних пакетів поки немає: усе, що потрібно, вже є в Buildroot.
-# Коли з'являться, вони лягатимуть у package/<назва>/ і підхоплюватимуться так:
+# No custom packages yet. Any added under package/<name>/ are picked up here.
 include $(sort $(wildcard $(BR2_EXTERNAL_RPI5OS_PATH)/package/*/*.mk))

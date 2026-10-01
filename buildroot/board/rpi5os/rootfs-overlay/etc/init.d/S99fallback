@@ -1,19 +1,19 @@
 #!/bin/sh
 #
-# S99fallback: якщо за 3 хв після старту немає IP на wlan0 або не працює sshd,
-# вимикаємо завантаження з SD і перезавантажуємось. Pi повертається на SSD
-# (BOOT_ORDER=0xf461: SD → NVMe → USB), а причина лишається в /boot/rpi5os-boot.log.
+# S99fallback: if 3 minutes after boot wlan0 has no address or sshd is down,
+# disable SD boot and reboot. The Pi comes back on the SSD (BOOT_ORDER=0xf461:
+# SD → NVMe → USB) and the reason stays in /boot/rpi5os-boot.log.
 #
-# У нас лише Wi-Fi: rpi5os, яка не вийшла в мережу, інакше була б недосяжна.
-# Вимкнути (для дебагу на місці): створити /boot/no-fallback.
+# Wi-Fi is the only link, so rpi5os without network would be unreachable.
+# To disable (on-site debugging): create /boot/no-fallback.
 
 . /usr/lib/rpi5os/common.sh
 
 TIMEOUT=180
 STEP=5
 
-# Адреса від DHCP. 169.254.x.x не рахується: її вішає avahi-autoipd, коли
-# udhcpc не отримав lease (leasefail у default.script), тобто якраз без мережі.
+# A DHCP address. 169.254.x.x doesn't count: avahi-autoipd assigns it when
+# udhcpc gets no lease (leasefail in default.script), i.e. with no network.
 wlan_addr() {
 	ip -4 -o addr show dev wlan0 2>/dev/null | awk '$4 !~ /^169\.254\./ {print $4; exit}'
 }
@@ -50,7 +50,7 @@ case "$1" in
 			log "автовідкат вимкнено (/boot/no-fallback)"
 			exit 0
 		fi
-		# У фоні: rcS не має чекати 3 хвилини.
+		# In the background: rcS must not wait 3 minutes.
 		watch </dev/null >/dev/null 2>&1 &
 		;;
 	stop|restart|reload)

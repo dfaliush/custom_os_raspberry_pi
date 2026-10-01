@@ -1,6 +1,6 @@
 #!/bin/sh
-# Правки rootfs перед пакуванням. Аргумент $1 = TARGET_DIR.
-# Overlay кладе файли як є; тут те, що треба дописати в згенеровані файли.
+# Rootfs fixups before packing; $1 = TARGET_DIR. The overlay copies files
+# as is, this script patches the files Buildroot generates.
 
 set -eu
 
@@ -8,25 +8,25 @@ TARGET="$1"
 EXT="${BR2_EXTERNAL_RPI5OS_PATH}"
 VERSION="$(cat "${EXT}/VERSION")"
 
-# --- /boot: FAT-розділ SD, звідти беремо userconf.txt і wpa_supplicant.conf ---
-# umask=0077: FAT не має прав, без цього файли на ньому читав би будь-хто.
+# FAT has no permissions: without umask=0077 anyone could read userconf.txt
+# and wpa_supplicant.conf on it.
 mkdir -p "${TARGET}/boot"
 grep -q '[[:space:]]/boot[[:space:]]' "${TARGET}/etc/fstab" || \
 	echo '/dev/mmcblk0p1	/boot	vfat	defaults,noatime,umask=0077	0	0' >> "${TARGET}/etc/fstab"
 
-# --- /home: у skeleton Buildroot його немає, а adduser без нього не створить домашню теку ---
+# Buildroot's skeleton has no /home, and adduser can't create a home directory without it.
 mkdir -p "${TARGET}/home"
 
-# --- root без пароля = вхід без пароля. Блокуємо: '*' не збігається з жодним паролем. ---
+# An empty root password means login without one. '*' matches no password.
 sed -i 's/^root:[^:]*:/root:*:/' "${TARGET}/etc/shadow"
 
-# --- sshd: наші опції на початку файлу. У sshd_config перше входження виграє. ---
+# The first occurrence wins in sshd_config, so our options go on top.
 SSHD="${TARGET}/etc/ssh/sshd_config"
 if ! grep -q '^# rpi5os:begin' "${SSHD}"; then
 	{
-		echo '# rpi5os:begin (див. custom_os_raspberry_pi: buildroot/board/rpi5os/post-build.sh)'
+		echo '# rpi5os:begin (see buildroot/board/rpi5os/post-build.sh)'
 		echo 'PermitRootLogin no'
-		echo '# Вмикається тільки на перший вхід; sudo ssh-keys-only переключає на "no".'
+		echo '# For the first login only; sudo ssh-keys-only switches it to "no".'
 		echo 'PasswordAuthentication yes'
 		echo 'KbdInteractiveAuthentication no'
 		echo 'PubkeyAuthentication yes'
@@ -37,12 +37,11 @@ if ! grep -q '^# rpi5os:begin' "${SSHD}"; then
 	mv "${SSHD}.new" "${SSHD}"
 fi
 
-# --- sudo для групи wheel (користувач із userconf.txt потрапляє в неї) ---
-# sudoers лежить з правами 0440: ">>" не спрацює, а sed -i замінює файл і зберігає права.
+# The userconf.txt user is added to wheel. sudoers is mode 0440, so ">>"
+# fails, while sed -i replaces the file and keeps the mode.
 grep -q '^%wheel ALL=(ALL:ALL) ALL' "${TARGET}/etc/sudoers" || \
 	sed -i '$a %wheel ALL=(ALL:ALL) ALL' "${TARGET}/etc/sudoers"
 
-# --- Версія образу в os-release, щоб на пристрої було видно, що саме запущено ---
 OSR="${TARGET}/usr/lib/os-release"
 [ -f "${OSR}" ] || OSR="${TARGET}/etc/os-release"
 sed -i '/^VARIANT_ID=/d; /^IMAGE_ID=/d; /^IMAGE_VERSION=/d' "${OSR}"
@@ -52,13 +51,12 @@ sed -i '/^VARIANT_ID=/d; /^IMAGE_ID=/d; /^IMAGE_VERSION=/d' "${OSR}"
 	echo "IMAGE_VERSION=${VERSION}"
 } >> "${OSR}"
 
-# --- Пакет wpa_supplicant кладе свій /etc/wpa_supplicant.conf з network={key_mgmt=NONE}:
-#     «підключайся до будь-якої відкритої мережі». Нам такого не треба, а S41wifi
-#     за наявністю цього файлу вирішує, що Wi-Fi уже налаштований. Справжній
-#     конфіг приходить тільки з boot-розділу (S30bootcfg).
+# The wpa_supplicant package installs /etc/wpa_supplicant.conf with
+# network={key_mgmt=NONE}, i.e. "join any open network", and S41wifi treats
+# the file as configured Wi-Fi. The real config comes from the boot partition.
 rm -f "${TARGET}/etc/wpa_supplicant.conf"
 
-# --- Секретів в образі бути не може: падаємо, якщо щось просочилося ---
+# The image is public: fail if any secret slipped in.
 for f in etc/ssh/ssh_host_*key* root/.ssh/authorized_keys etc/wpa_supplicant.conf; do
 	for hit in ${TARGET}/${f}; do
 		if [ -e "${hit}" ]; then

@@ -1,8 +1,8 @@
 # rpi5os: Raspberry Pi 5 + Wi-Fi + SSH.
-# Основа: configs/raspberrypi5_defconfig з Buildroot 2026.02.3 (перший блок
-# скопійовано без змін, крім шляхів до config/cmdline і розміру rootfs).
+# Based on configs/raspberrypi5_defconfig from Buildroot 2026.02.3. The first
+# block is copied as is, except the config/cmdline paths and the rootfs size.
 
-# --- Плата і toolchain (як у raspberrypi5_defconfig) ---
+# --- Board and toolchain ---
 BR2_aarch64=y
 BR2_cortex_a76=y
 BR2_TOOLCHAIN_EXTERNAL=y
@@ -11,7 +11,7 @@ BR2_TOOLCHAIN_EXTERNAL_BOOTLIN_AARCH64_GLIBC_STABLE=y
 BR2_GLOBAL_PATCH_DIR="board/raspberrypi/patches"
 BR2_DOWNLOAD_FORCE_CHECK_HASHES=y
 
-# --- Kernel: форк raspberrypi/linux, прибитий до коміту ---
+# --- Kernel: raspberrypi/linux pinned to a commit ---
 BR2_LINUX_KERNEL=y
 BR2_LINUX_KERNEL_CUSTOM_TARBALL=y
 BR2_LINUX_KERNEL_CUSTOM_TARBALL_LOCATION="$(call github,raspberrypi,linux,21b410140c47ffab5668399f6f143c7d7b935c8b)/linux-21b410140c47ffab5668399f6f143c7d7b935c8b.tar.gz"
@@ -21,7 +21,7 @@ BR2_LINUX_KERNEL_DTS_SUPPORT=y
 BR2_LINUX_KERNEL_INTREE_DTS_NAME="broadcom/bcm2712-rpi-5-b broadcom/bcm2712d0-rpi-5-b broadcom/bcm2712-rpi-500"
 BR2_LINUX_KERNEL_NEEDS_HOST_OPENSSL=y
 
-# --- Boot-розділ: firmware Pi + наші config.txt / cmdline.txt ---
+# --- Boot partition: Pi firmware + our config.txt / cmdline.txt ---
 BR2_PACKAGE_RPI_FIRMWARE=y
 BR2_PACKAGE_RPI_FIRMWARE_CONFIG_FILE="$(BR2_EXTERNAL_RPI5OS_PATH)/board/rpi5os/config.txt"
 BR2_PACKAGE_RPI_FIRMWARE_CMDLINE_FILE="$(BR2_EXTERNAL_RPI5OS_PATH)/board/rpi5os/cmdline.txt"
@@ -31,10 +31,10 @@ BR2_PACKAGE_XZ=y
 BR2_PACKAGE_KMOD=y
 BR2_PACKAGE_KMOD_TOOLS=y
 
-# --- Образ ---
+# --- Image ---
 BR2_TARGET_ROOTFS_EXT2=y
 BR2_TARGET_ROOTFS_EXT2_4=y
-# 120M з базового конфігу замало під OpenSSH + Avahi + firmware.
+# The base config's 120M is too small for OpenSSH + Avahi + firmware.
 BR2_TARGET_ROOTFS_EXT2_SIZE="256M"
 # BR2_TARGET_ROOTFS_TAR is not set
 BR2_PACKAGE_HOST_DOSFSTOOLS=y
@@ -43,32 +43,32 @@ BR2_PACKAGE_HOST_KMOD_XZ=y
 BR2_PACKAGE_HOST_MTOOLS=y
 
 # ============================================================================
-# Далі: наші зміни відносно raspberrypi5_defconfig
+# Changes on top of raspberrypi5_defconfig
 # ============================================================================
 
-# Однаковий вхід → однаковий вихід: фіксовані timestamps у rootfs.
+# Same input, same output: fixed timestamps in rootfs.
 BR2_REPRODUCIBLE=y
 
 BR2_TARGET_GENERIC_HOSTNAME="rpi5os"
-BR2_TARGET_GENERIC_ISSUE="rpi5os (Buildroot) - вхід тільки по SSH"
+BR2_TARGET_GENERIC_ISSUE="rpi5os (Buildroot) - SSH login only"
 
-# eudev: модулі (brcmfmac для Wi-Fi) підвантажуються самі за modalias.
-# Зі статичним /dev wlan0 не з'являється без ручного modprobe.
+# eudev loads modules (brcmfmac for Wi-Fi) by modalias. With a static /dev,
+# wlan0 never appears without a manual modprobe.
 BR2_ROOTFS_DEVICE_CREATION_DYNAMIC_EUDEV=y
 
-# Базовий конфіг піднімав DHCP на eth0. У нас тільки Wi-Fi, і ним керує
-# власний S41wifi, тому ifupdown лишається лише з lo.
+# The base config runs DHCP on eth0. Only Wi-Fi is used here and S41wifi
+# manages it, so ifupdown keeps just lo.
 BR2_SYSTEM_DHCP=""
 
 BR2_ROOTFS_OVERLAY="$(BR2_EXTERNAL_RPI5OS_PATH)/board/rpi5os/rootfs-overlay"
-# Спершу штатний скрипт (консоль на tty1), потім наш.
+# The stock script first (console on tty1), then ours.
 BR2_ROOTFS_POST_BUILD_SCRIPT="board/raspberrypi5/post-build.sh $(BR2_EXTERNAL_RPI5OS_PATH)/board/rpi5os/post-build.sh"
 BR2_ROOTFS_POST_IMAGE_SCRIPT="$(BR2_EXTERNAL_RPI5OS_PATH)/board/rpi5os/post-image.sh"
 
-# --- Wi-Fi: чип CYW43455 через SDIO ---
+# --- Wi-Fi: CYW43455 over SDIO ---
 BR2_PACKAGE_BRCMFMAC_SDIO_FIRMWARE_RPI=y
 BR2_PACKAGE_BRCMFMAC_SDIO_FIRMWARE_RPI_WIFI=y
-# regulatory.db: без неї kernel лишається в "world" домені й частина 5 ГГц каналів закрита.
+# Without regulatory.db the kernel stays in the "world" domain and some 5 GHz channels are disabled.
 BR2_PACKAGE_WIRELESS_REGDB=y
 BR2_PACKAGE_IW=y
 BR2_PACKAGE_WPA_SUPPLICANT=y
@@ -77,11 +77,11 @@ BR2_PACKAGE_WPA_SUPPLICANT_WPA3=y
 BR2_PACKAGE_WPA_SUPPLICANT_CLI=y
 BR2_PACKAGE_WPA_SUPPLICANT_PASSPHRASE=y
 
-# --- Доступ ---
-# OpenSSH, а не Dropbear: потрібен sftp-server, бо сучасний scp (і з Windows теж) ходить через SFTP.
+# --- Access ---
+# OpenSSH, not Dropbear: modern scp (Windows too) uses SFTP and needs sftp-server.
 BR2_PACKAGE_OPENSSH=y
 BR2_PACKAGE_SUDO=y
 
-# mDNS: ssh user@rpi5os.local без пошуку IP у роутері.
+# mDNS: reach the Pi as rpi5os.local without looking up its address.
 BR2_PACKAGE_AVAHI=y
 BR2_PACKAGE_AVAHI_DAEMON=y
