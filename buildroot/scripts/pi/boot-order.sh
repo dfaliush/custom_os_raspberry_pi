@@ -38,7 +38,7 @@ case "${1:-show}" in
 		;;
 	show)
 		echo "BOOT_ORDER зараз: $(current)"
-		ls /boot/firmware/pieeprom.upd >/dev/null 2>&1 && echo "є відкладене оновлення EEPROM (pieeprom.upd)"
+		if [ -e /boot/firmware/pieeprom.upd ]; then echo "є відкладене оновлення EEPROM (pieeprom.upd)"; fi
 		;;
 	*)
 		echo "Usage: $0 sd-first|restore|show" >&2

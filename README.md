@@ -27,6 +27,236 @@ Wi-Fi PSK, host keys (генеруються на першому старті, �
 пристрої). Образ публічний, і це перевіряє `post-build.sh`: збірка падає, якщо
 щось із цього потрапило в rootfs.
 
+## Встановити готовий образ на microSD
+
+Для нового користувача: нічого не збираємо, беремо образ із
+[Releases](https://github.com/dfaliush/custom_os_raspberry_pi/releases).
+Потрібні microSD від 1 ГБ, кард-рідер і ПК. Команди нижче для Windows:
+[Git Bash](https://git-scm.com/download/win) і
+[Raspberry Pi Imager](https://www.raspberrypi.com/software/). На Linux і
+macOS ті самі команди виконуються у звичайному терміналі.
+
+**1. Завантажити й перевірити образ** (Git Bash):
+
+```bash
+mkdir -p ~/rpi5os && cd ~/rpi5os
+curl -LO https://github.com/dfaliush/custom_os_raspberry_pi/releases/download/buildroot-v1.0.0/rpi5os-buildroot-v1.0.0-sdcard.img.xz
+curl -LO https://github.com/dfaliush/custom_os_raspberry_pi/releases/download/buildroot-v1.0.0/SHA256SUMS
+sha256sum -c SHA256SUMS --ignore-missing    # має бути: rpi5os-buildroot-v1.0.0-sdcard.img.xz: OK
+```
+
+**2. Записати на картку.** Raspberry Pi Imager → *Choose Device*: Raspberry
+Pi 5 → *Choose OS*: *Use Custom* → `rpi5os-buildroot-v1.0.0-sdcard.img.xz`
+(розпаковувати не треба) → *Choose Storage*: картка → *Next*. На питання про
+*OS customisation* відповісти **No**: ці налаштування для Raspberry Pi OS,
+rpi5os їх не розуміє.
+
+Те саме в терміналі: **PowerShell від імені адміністратора** (без цього
+Imager не пише на диски). Imager у режимі `--cli` нічого не питає, сам
+розпаковує `.xz`, звіряє записане і відмовляється писати на системний диск.
+
+```powershell
+winget install --id RaspberryPiFoundation.RaspberryPiImager -e     # якщо Imager ще не встановлений
+Get-Disk | Where-Object BusType -in 'USB','SD','MMC' | Format-Table Number,FriendlyName,BusType,@{n='GB';e={[math]::Round($_.Size/1GB,1)}}
+$n = 2                                      # Number картки з таблиці вище
+$imager = (Get-Item 'C:\Program Files*\Raspberry Pi Imager\rpi-imager.exe' | Select-Object -First 1).FullName
+& $imager --cli "$HOME\rpi5os\rpi5os-buildroot-v1.0.0-sdcard.img.xz" "\\.\PhysicalDrive$n"
+```
+
+Якщо таблиця порожня, картку не видно як знімний диск: витягни й встав її ще
+раз або спробуй інший кард-рідер. Номер `$n` перевір двічі: якщо помилишся,
+Imager повністю затре вибраний диск.
+
+На Linux замість Imager можна використати `dd`. **Перевір пристрій**: `dd`
+затре його повністю.
+
+```bash
+lsblk -d -o NAME,SIZE,TRAN,MODEL            # картка: sdX або mmcblk0
+xz -dc rpi5os-buildroot-v1.0.0-sdcard.img.xz | sudo dd of=/dev/sdX bs=4M conv=fsync status=progress
+```
+
+**3. Відкрити boot-розділ.** Imager після запису витягує картку програмно,
+тож вийми її й встав знову. Windows покаже диск `RPI5OS-BOOT` і, можливо,
+запропонує відформатувати другий розділ: **Скасувати**, бо це rootfs у ext4,
+якого Windows не читає. У Git Bash знайди літеру диска за міткою:
+
+```bash
+L=$(powershell.exe -NoProfile -Command "(Get-Volume -FileSystemLabel RPI5OS-BOOT -ErrorAction SilentlyContinue | Select-Object -First 1).DriveLetter" | tr -d '\r' | tr 'A-Z' 'a-z')
+if [ -n "$L" ]; then B=/$L; ls "$B"; else unset B; echo "RPI5OS-BOOT не знайдено: встав картку ще раз"; fi
+```
+
+Має бути `config.txt`, `Image`, `*.example` тощо. На Linux:
+`sudo mount /dev/sdX1 /mnt && B=/mnt`, а файли в кроках 4–5 писати через
+`sudo tee` замість `>`.
+
+**4. Користувач і пароль.** Ім'я може складатися з малих латинських літер,
+цифр, `_` і `-`. Пароль не зберігається: у файл іде тільки sha512-crypt hash.
+
+```bash
+read -rsp 'Пароль: ' P; echo
+printf 'user:%s\n' "$(printf '%s' "$P" | openssl passwd -6 -stdin)" > "$B/userconf.txt"; unset P
+cat "$B/userconf.txt"                       # user:$6$...
+```
+
+**5. Wi-Fi.** Ethernet rpi5os не налаштовує, мережа тільки через Wi-Fi.
+Країна потрібна для 5 ГГц: без неї частина каналів закрита. Пароль Wi-Fi
+вводиться через `read -s`, тож він не потрапляє ні на екран, ні в історію bash.
+
+```bash
+read -rp 'SSID: ' SSID; read -rsp 'Пароль Wi-Fi: ' PSK; echo; read -rp 'Країна (UA, PL, DE, ...): ' CC
+printf 'ctrl_interface=/var/run/wpa_supplicant\nupdate_config=0\ncountry=%s\n\nnetwork={\n\tssid="%s"\n\tpsk="%s"\n\tkey_mgmt=WPA-PSK\n}\n' \
+	"$CC" "$SSID" "$PSK" > "$B/wpa_supplicant.conf"; unset PSK
+grep -v psk "$B/wpa_supplicant.conf"        # перевірка без пароля
+```
+
+Для мережі тільки з WPA3 заміни у файлі `key_mgmt=WPA-PSK` на `key_mgmt=SAE`.
+Без терміналу те саме робиться так: скопіювати `wpa_supplicant.conf.example`
+у `wpa_supplicant.conf`, відредагувати в Блокноті і зберегти як **UTF-8**, не
+«UTF-8 with BOM».
+
+На першому старті rpi5os перенесе обидва файли в rootfs і видалить їх з
+картки: на FAT немає прав доступу, і пароль Wi-Fi там лишатися не повинен.
+
+**6. Запуск.** Безпечно вийняти картку (Провідник → *Eject*, або з Git Bash
+командою нижче), вставити в Pi 5 і ввімкнути живлення.
+
+```bash
+powershell.exe -NoProfile -Command "(New-Object -ComObject Shell.Application).Namespace(17).ParseName('${B#/}:').InvokeVerb('Eject')"
+```
+
+Pi 5 із завода стартує з SD першою. Якщо на твоїй Pi уже стоїть ОС на SSD,
+спершу прочитай розділ нижче. Через ~1 хв:
+
+```bash
+ssh user@rpi5os.local                       # пароль з кроку 4
+```
+
+Далі розділ «Перший вхід»: додати ключ і вимкнути вхід за паролем. Якщо
+`rpi5os.local` не знаходиться, шукай у списку DHCP роутера пристрій з ім'ям
+`rpi5os`.
+
+**Якщо Pi не з'явилась у мережі.** Через 3 хв без мережі rpi5os сама
+«вимикає» картку і перезавантажується (див. «Відкат на SSD»). Причину видно на
+ПК: вставити картку і відкрити `RPI5OS-BOOT\rpi5os-boot.log`. Щоб спробувати
+ще раз, поверни boot-файли на місце й поклади виправлений
+`wpa_supplicant.conf` (крок 5):
+
+```bash
+mv "$B"/disabled/* "$B"/ && rmdir "$B/disabled"
+tail -n 20 "$B/rpi5os-boot.log"
+```
+
+## Raspberry Pi OS уже на SSD: перемкнутись на SD
+
+Якщо Pi стартує з NVMe SSD, вставлена картка ігнорується: порядок
+завантаження задає `BOOT_ORDER` в EEPROM. Його цифри читаються справа наліво:
+`1` = SD, `6` = NVMe, `4` = USB, `f` = почати знову. Наприклад, `0xf461`
+означає SD → NVMe → USB, а `0xf416` (так ставить `raspi-config`, коли
+обираєш NVMe) означає NVMe → SD → USB.
+
+Кроки 1–3 виконуються на Raspberry Pi OS, з якою Pi зараз стартує. На SSD
+змінюється тільки конфіг EEPROM.
+
+**0. Зайти на Raspberry Pi OS** з ПК (підстав свої ім'я користувача й
+hostname):
+
+```bash
+ssh user@raspberrypi
+```
+
+**1. Скрипти з репо** (тієї ж версії, що й образ):
+
+```bash
+mkdir -p ~/rpi5os && cd ~/rpi5os
+for s in boot-order.sh sd-boot.sh flash-sd.sh; do
+	curl -fsSLO "https://raw.githubusercontent.com/dfaliush/custom_os_raspberry_pi/buildroot-v1.0.0/buildroot/scripts/pi/$s"
+done
+sudo bash boot-order.sh show                # BOOT_ORDER зараз: 0x...
+```
+
+**2. Записати картку.** Або на ПК, як у розділі вище (кроки 1–5), і вставити
+в Pi, або прямо з Pi, не виймаючи картку зі слота. Для другого варіанта Pi має
+бути підключена до Wi-Fi через NetworkManager: `flash-sd.sh` бере SSID і
+пароль з активного з'єднання і пише `wpa_supplicant.conf` сам.
+
+```bash
+curl -LO https://github.com/dfaliush/custom_os_raspberry_pi/releases/download/buildroot-v1.0.0/rpi5os-buildroot-v1.0.0-sdcard.img.xz
+printf 'user:%s\n' "$(openssl passwd -6)" > /dev/shm/rpi5os-userconf.txt    # openssl двічі спитає пароль
+sudo bash flash-sd.sh rpi5os-buildroot-v1.0.0-sdcard.img.xz
+```
+
+`flash-sd.sh` пише тільки в `/dev/mmcblk0` і відмовиться, якщо з цього
+пристрою працює поточна система. Записане він звіряє за sha256.
+
+**3. SD першою в порядку завантаження:**
+
+```bash
+sudo bash boot-order.sh sd-first            # бекап у ~/rpi5os-eeprom-backup.conf, потім BOOT_ORDER=0xf461
+sudo reboot
+```
+
+Під час reboot bootloader оновлює EEPROM і стартує з SD. Якщо Pi все ж
+піднялась з SSD, перевір `sudo bash boot-order.sh show` і перезавантаж ще
+раз. SSH-сесія обірветься. Через ~1 хв підключайся вже до rpi5os, як
+описано в розділі «Перший вхід» нижче.
+
+**Як ходити між системами після цього:**
+
+| Що треба | Команда |
+| --- | --- |
+| з rpi5os на SSD | `sudo boot-ssd && sudo reboot` (або вийняти картку й перезавантажити) |
+| з SSD знову на rpi5os | `sudo bash ~/rpi5os/sd-boot.sh on && sudo reboot` |
+| подивитись стан і лог rpi5os з SSD | `sudo bash ~/rpi5os/sd-boot.sh status` |
+| повернути EEPROM як було | `sudo bash ~/rpi5os/boot-order.sh restore && sudo reboot` |
+
+З `BOOT_ORDER=0xf461` і без картки (або з вимкненою) Pi сама стартує з
+SSD, тож `sd-first` можна не відкочувати.
+
+## Перший вхід
+
+Команди для ПК: Git Bash або PowerShell, де вказано. Ім'я користувача й
+пароль ті, що в `userconf.txt`.
+
+**1. Якщо rpi5os на цій картці вже стояла раніше,** прибери старий host key.
+Кожна установка генерує нові ключі, і без цього ssh відмовить з `REMOTE HOST
+IDENTIFICATION HAS CHANGED`:
+
+```bash
+ssh-keygen -R rpi5os.local
+```
+
+**2. Увійти за паролем.** На питання про fingerprint відповісти `yes`:
+
+```bash
+ssh user@rpi5os.local
+exit                                        # назад на ПК: наступні команди виконуються там
+```
+
+**3. Додати свій ключ.** В образі ключів немає. Якщо ключа ще немає й на ПК,
+спершу створи його: `ssh-keygen -t ed25519`. Далі на ПК, у PowerShell:
+
+```powershell
+type $env:USERPROFILE\.ssh\id_ed25519.pub | ssh user@rpi5os.local "mkdir -p ~/.ssh && chmod 700 ~/.ssh && cat >> ~/.ssh/authorized_keys"
+```
+
+Те саме в cmd (`C:\>`): `type %USERPROFILE%\.ssh\id_ed25519.pub | ssh …`, і
+далі так само. У Git Bash: `ssh-copy-id user@rpi5os.local`.
+
+> Якщо `type … | ssh` у PowerShell 5.1 нічого не дописав (файл лишився
+> порожнім) — встав ключ прямо в команду: `ssh … "echo 'ssh-ed25519 AAAA…' >> ~/.ssh/authorized_keys"`.
+
+**4. Перевірити вхід за ключем і вимкнути паролі.** Перша команда має
+пройти без запиту пароля. `sudo` спитає пароль користувача:
+
+```bash
+ssh -o BatchMode=yes user@rpi5os.local true && ssh -t user@rpi5os.local sudo ssh-keys-only
+```
+
+У PowerShell 5.1 немає `&&`, там пиши `…; if ($?) { … }`.
+
+`ssh-keys-only` відмовиться, якщо `authorized_keys` порожній: так неможливо
+відрізати собі доступ. Далі вхід лише за ключем: `ssh user@rpi5os.local`.
+
 ## Стенд
 
 | Що | Деталі |
@@ -116,10 +346,11 @@ wsl -d Ubuntu -- bash buildroot/scripts/dist.sh
   Перевірено на залізі: з `psk="wrong"` відкат на SSD через ~200 с, у лог
   записано `wpa_state=SCANNING`.
 
-## Записати на microSD Pi
+## Записати свою збірку з ПК прямо на Pi (розробка)
 
-Записуємо прямо з Raspberry Pi OS на SSD у microSD тієї ж Pi; образ і
-тимчасові файли лежать у `/dev/shm` (RAM), на SSD нічого не пишеться.
+Для власної збірки з `~/br/dist`, без кард-рідера: образ пишеться з Raspberry
+Pi OS на SSD у microSD тієї ж Pi. Образ і тимчасові файли лежать у `/dev/shm`
+(RAM), на SSD нічого не пишеться.
 
 **1. Пароль першого входу** (робиш сам, пароль нікуди не передається відкритим):
 
@@ -143,37 +374,14 @@ FAT-розділ `userconf.txt` та `wpa_supplicant.conf`. Wi-Fi беретьс
 з'єднання NetworkManager на самій Pi: PSK не виходить за її межі.
 
 **3. Порядок завантаження.** У Pi стояло `BOOT_ORDER=0xf146` (NVMe першим),
-з таким microSD ніколи не стартує. Ставимо SD першою:
+з таким microSD ніколи не стартує. Ставимо SD першою (детальніше в розділі
+«Raspberry Pi OS уже на SSD: перемкнутись на SD»):
 
 ```bash
 ssh user@raspberrypi "sudo bash /dev/shm/boot-order.sh sd-first && sudo reboot"
 ```
 
 З вийнятою або вимкненою SD Pi сама йде на NVMe.
-
-## Перший вхід
-
-```bash
-ssh user@rpi5os.local                      # пароль з кроку 1
-```
-
-Ключ додається вже в живу систему (у образі ключів немає):
-
-```powershell
-type $env:USERPROFILE\.ssh\id_ed25519.pub | ssh user@rpi5os.local "mkdir -p ~/.ssh && chmod 700 ~/.ssh && cat >> ~/.ssh/authorized_keys"
-```
-
-> Якщо `type … | ssh` у PowerShell 5.1 нічого не дописав (файл лишився
-> порожнім) — встав ключ прямо в команду: `ssh … "echo 'ssh-ed25519 AAAA…' >> ~/.ssh/authorized_keys"`.
-
-Перевірити вхід за ключем і вимкнути паролі:
-
-```bash
-ssh -o BatchMode=yes user@rpi5os.local true && ssh -t user@rpi5os.local sudo ssh-keys-only
-```
-
-`ssh-keys-only` відмовиться, якщо `authorized_keys` порожній: так неможливо
-відрізати собі доступ.
 
 ## Як воно стартує
 
@@ -208,7 +416,4 @@ Wi-Fi тут єдиний канал: rpi5os, яка не вийшла в мер
 Assets з `~/br/dist/`: `.img.xz`, `SHA256SUMS`, `buildroot.config`,
 `legal-info-manifest.csv` (пакети, версії, ліцензії).
 
-Записати реліз без збірки: завантажити `.img.xz`, перевірити `sha256sum -c
-SHA256SUMS`, далі розділ «Записати на microSD Pi» (або Raspberry Pi Imager →
-Use custom, потім підкласти `userconf.txt` і `wpa_supplicant.conf` на FAT за
-прикладами `*.example`).
+Як записати реліз без збірки: розділ «Встановити готовий образ на microSD».
