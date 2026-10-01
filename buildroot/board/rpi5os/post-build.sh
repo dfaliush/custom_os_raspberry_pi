@@ -21,21 +21,24 @@ mkdir -p "${TARGET}/home"
 sed -i 's/^root:[^:]*:/root:*:/' "${TARGET}/etc/shadow"
 
 # The first occurrence wins in sshd_config, so our options go on top.
+# Incremental builds keep the old target/etc/ssh/sshd_config (openssh never
+# overwrites it), so the block from a previous run is replaced, not skipped.
 SSHD="${TARGET}/etc/ssh/sshd_config"
-if ! grep -q '^# rpi5os:begin' "${SSHD}"; then
-	{
-		echo '# rpi5os:begin (see buildroot/board/rpi5os/post-build.sh)'
-		echo 'PermitRootLogin no'
-		echo '# For the first login only; sudo ssh-keys-only switches it to "no".'
-		echo 'PasswordAuthentication yes'
-		echo 'KbdInteractiveAuthentication no'
-		echo 'PubkeyAuthentication yes'
-		echo '# rpi5os:end'
-		echo
-		cat "${SSHD}"
-	} > "${SSHD}.new"
-	mv "${SSHD}.new" "${SSHD}"
-fi
+{
+	echo '# rpi5os:begin (see buildroot/board/rpi5os/post-build.sh)'
+	echo 'PermitRootLogin no'
+	echo '# For the first login only; sudo ssh-keys-only switches it to "no".'
+	echo 'PasswordAuthentication yes'
+	echo 'KbdInteractiveAuthentication no'
+	echo 'PubkeyAuthentication yes'
+	echo '# rpi5os:end'
+	echo
+	awk '/^# rpi5os:begin/ { skip = 1 }
+	     skip == 1 { if (/^# rpi5os:end/) skip = 2; next }
+	     skip == 2 { skip = 0; if (/^$/) next }
+	     { print }' "${SSHD}"
+} > "${SSHD}.new"
+mv "${SSHD}.new" "${SSHD}"
 
 # The userconf.txt user is added to wheel. sudoers is mode 0440, so ">>"
 # fails, while sed -i replaces the file and keeps the mode.
