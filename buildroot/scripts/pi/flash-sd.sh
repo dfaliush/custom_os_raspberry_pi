@@ -67,10 +67,9 @@ trap 'sync; umount "$MNT" 2>/dev/null || true' EXIT
 # Wi-Fi з активного з'єднання NetworkManager. PSK не залишає цю Pi.
 con="$(nmcli -t -f NAME,TYPE con show --active | awk -F: '$2 == "802-11-wireless" {print $1; exit}')"
 [ -n "$con" ] || die "немає активного Wi-Fi з'єднання"
-# -g екранує ':' і '\' зворотним слешем; знімаємо екранування.
-unesc() { sed -e 's/\\:/:/g' -e 's/\\\\/\\/g'; }
-ssid="$(nmcli -s -g 802-11-wireless.ssid con show "$con" | unesc)"
-psk="$(nmcli -s -g 802-11-wireless-security.psk con show "$con" | unesc)"
+# --escape no: інакше -g екранує ':' і '\' у SSID/PSK зворотним слешем.
+ssid="$(nmcli --escape no -s -g 802-11-wireless.ssid con show "$con")"
+psk="$(nmcli --escape no -s -g 802-11-wireless-security.psk con show "$con")"
 kmgmt="$(nmcli -g 802-11-wireless-security.key-mgmt con show "$con")"
 [ -n "$ssid" ] && [ -n "$psk" ] || die "не вдалося прочитати SSID/PSK з '$con'"
 case "$kmgmt" in
