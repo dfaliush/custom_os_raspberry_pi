@@ -14,6 +14,9 @@ mkdir -p "${TARGET}/boot"
 grep -q '[[:space:]]/boot[[:space:]]' "${TARGET}/etc/fstab" || \
 	echo '/dev/mmcblk0p1	/boot	vfat	defaults,noatime,umask=0077	0	0' >> "${TARGET}/etc/fstab"
 
+# --- /home: у skeleton Buildroot його немає, а adduser без нього не створить домашню теку ---
+mkdir -p "${TARGET}/home"
+
 # --- root без пароля = вхід без пароля. Блокуємо: '*' не збігається з жодним паролем. ---
 sed -i 's/^root:[^:]*:/root:*:/' "${TARGET}/etc/shadow"
 

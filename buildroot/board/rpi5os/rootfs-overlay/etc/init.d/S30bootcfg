@@ -28,11 +28,26 @@ apply_userconf() {
 		*) log "userconf: hash має бути з 'openssl passwd -6', пропускаю"; return 1 ;;
 	esac
 
-	grep -q "^${name}:" /etc/passwd || adduser -D -s /bin/sh "$name"
-	addgroup "$name" wheel 2>/dev/null || true
+	grep -q "^${name}:" /etc/passwd || adduser -D -h "/home/${name}" -s /bin/sh "$name"
+	# adduser не створює home, якщо його не вийшло з першого разу: робимо явно.
+	mkdir -p "/home/${name}"
+	chown "${name}:" "/home/${name}"
+	chmod 700 "/home/${name}"
+
+	# "addgroup user wheel" у нашому BusyBox не працює (FEATURE_ADDUSER_TO_GROUP
+	# вимкнено), тому дописуємо в /etc/group напряму: "wheel:x:10:root" → "...:root,user".
+	if ! grep -qE "^wheel:[^:]*:[^:]*:(.*,)?${name}(,|$)" /etc/group; then
+		sed -i -E "s/^(wheel:[^:]*:[^:]*:)(.+)$/\1\2,${name}/; s/^(wheel:[^:]*:[^:]*:)$/\1${name}/" /etc/group
+	fi
+
 	# У crypt-алфавіті немає '|', '&' і '\', тож hash безпечно підставляти в sed.
 	sed -i "s|^${name}:[^:]*:|${name}:${hash}:|" /etc/shadow
-	log "userconf: користувач ${name} готовий (група wheel)"
+
+	if grep -qE "^wheel:.*[:,]${name}(,|$)" /etc/group && [ -d "/home/${name}" ]; then
+		log "userconf: користувач ${name} готовий (home, група wheel)"
+	else
+		log "userconf: ПОМИЛКА: ${name} без home або не в wheel"
+	fi
 }
 
 apply_wpa() {

@@ -12,6 +12,14 @@ GENIMAGE_TMP="${BUILD_DIR}/genimage.tmp"
 install -m 0644 "${BOARD_DIR}/bootfs/wpa_supplicant.conf.example" "${BINARIES_DIR}/rpi-firmware/"
 install -m 0644 "${BOARD_DIR}/bootfs/userconf.txt.example"        "${BINARIES_DIR}/rpi-firmware/"
 
+# Pi 5 Rev 1.1 має кремній BCM2712 D0. Firmware бере базовий bcm2712-rpi-5-b.dtb і
+# накладає на нього overlays/bcm2712d0.dtbo. Без цього файлу kernel отримує DT для
+# C1 і падає в panic за кілька секунд, ще до монтування rootfs. Беремо overlay з
+# того самого дерева kernel, яким зібрано Image, щоб версії збігались.
+D0_OVERLAY="$(ls "${BUILD_DIR}"/linux-*/arch/arm64/boot/dts/overlays/bcm2712d0.dtbo 2>/dev/null | head -n1)"
+[ -n "${D0_OVERLAY}" ] || { echo "post-image: немає bcm2712d0.dtbo у дереві kernel" >&2; exit 1; }
+install -D -m 0644 "${D0_OVERLAY}" "${BINARIES_DIR}/rpi-firmware/overlays/bcm2712d0.dtbo"
+
 FILES=()
 for i in "${BINARIES_DIR}"/*.dtb "${BINARIES_DIR}"/rpi-firmware/*; do
 	FILES+=( "${i#${BINARIES_DIR}/}" )
