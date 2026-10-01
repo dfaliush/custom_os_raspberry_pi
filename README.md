@@ -109,6 +109,12 @@ wsl -d Ubuntu -- bash /mnt/d/git/custom_os_raspberry_pi/buildroot/scripts/dist.s
   `network={key_mgmt=NONE}` («до будь-якої відкритої мережі»). Його ловить
   перевірка секретів у `post-build.sh`, файл видаляється.
 - **`nmcli -g` екранує `:` і `\`**: `flash-sd.sh` читає SSID/PSK з `--escape no`.
+- **`udhcpc` при `leasefail` запускає `avahi-autoipd`**, і той вішає на `wlan0`
+  `169.254.x.x`. Перша версія `S99fallback` рахувала будь-яку IPv4 і писала
+  `OK: 169.254.x.x/16`, доки DHCP ще не відповів. З неправильним PSK або
+  без роутера Pi лишилась би на SD недосяжною. Тепер link-local не рахується.
+  Перевірено на залізі: з `psk="wrong"` відкат на SSD через ~200 с, у лог
+  записано `wpa_state=SCANNING`.
 
 ## Записати на microSD Pi
 

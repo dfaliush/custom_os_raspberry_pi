@@ -12,15 +12,21 @@
 TIMEOUT=180
 STEP=5
 
+# Адреса від DHCP. 169.254.x.x не рахується: її вішає avahi-autoipd, коли
+# udhcpc не отримав lease (leasefail у default.script), тобто якраз без мережі.
+wlan_addr() {
+	ip -4 -o addr show dev wlan0 2>/dev/null | awk '$4 !~ /^169\.254\./ {print $4; exit}'
+}
+
 network_ready() {
-	ip -4 -o addr show dev wlan0 2>/dev/null | grep -q ' inet ' && pidof sshd >/dev/null
+	[ -n "$(wlan_addr)" ] && pidof sshd >/dev/null
 }
 
 watch() {
 	waited=0
 	while [ $waited -lt $TIMEOUT ]; do
 		if network_ready; then
-			log "OK: $(ip -4 -o addr show dev wlan0 | awk '{print $4}'), sshd працює"
+			log "OK: $(wlan_addr), sshd працює"
 			return 0
 		fi
 		sleep $STEP
