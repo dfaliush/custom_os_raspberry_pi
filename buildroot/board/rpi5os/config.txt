@@ -1,0 +1,7 @@
+# config.txt для rpi5os. Читає EEPROM-bootloader Pi 5 з FAT-розділу.
+# Довідка: https://www.raspberrypi.com/documentation/computers/config_txt.html
+
+# Kernel, який зібрав Buildroot (arm64 Image, не kernel_2712.img з Raspberry Pi OS).
+kernel=Image
+
+disable_overscan=1

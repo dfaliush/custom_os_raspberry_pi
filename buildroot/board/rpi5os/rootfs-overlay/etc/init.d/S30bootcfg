@@ -1,0 +1,81 @@
+#!/bin/sh
+#
+# S30bootcfg: підхоплює налаштування з FAT-розділу /boot.
+#
+#   /boot/userconf.txt        "ім'я:hash" → користувач у групі wheel, файл видаляється
+#   /boot/wpa_supplicant.conf → /etc/wpa_supplicant.conf (600), файл видаляється
+#
+# В образі немає ні користувачів, ні пароля Wi-Fi: їх дає той, хто записав SD.
+
+. /usr/lib/rpi5os/common.sh
+
+apply_userconf() {
+	f=/boot/userconf.txt
+	[ -f "$f" ] || return 0
+
+	line=$(tr -d '\r' < "$f" | grep -v '^[[:space:]]*#' | grep -m1 ':')
+	rm -f "$f"
+	sync
+	name=${line%%:*}
+	hash=${line#*:}
+
+	case "$name" in
+		''|*[!a-z0-9_-]*) log "userconf: погане ім'я користувача, пропускаю"; return 1 ;;
+	esac
+	# Тільки sha256/sha512-crypt: їх точно розуміє crypt() у sshd і sudo.
+	case "$hash" in
+		'$5$'*|'$6$'*) ;;
+		*) log "userconf: hash має бути з 'openssl passwd -6', пропускаю"; return 1 ;;
+	esac
+
+	grep -q "^${name}:" /etc/passwd || adduser -D -h "/home/${name}" -s /bin/sh "$name"
+	# adduser не створює home, якщо його не вийшло з першого разу: робимо явно.
+	mkdir -p "/home/${name}"
+	chown "${name}:" "/home/${name}"
+	chmod 700 "/home/${name}"
+
+	# "addgroup user wheel" у нашому BusyBox не працює (FEATURE_ADDUSER_TO_GROUP
+	# вимкнено), тому дописуємо в /etc/group напряму: "wheel:x:10:root" → "...:root,user".
+	if ! grep -qE "^wheel:[^:]*:[^:]*:(.*,)?${name}(,|$)" /etc/group; then
+		sed -i -E "s/^(wheel:[^:]*:[^:]*:)(.+)$/\1\2,${name}/; s/^(wheel:[^:]*:[^:]*:)$/\1${name}/" /etc/group
+	fi
+
+	# У crypt-алфавіті немає '|', '&' і '\', тож hash безпечно підставляти в sed.
+	sed -i "s|^${name}:[^:]*:|${name}:${hash}:|" /etc/shadow
+
+	if grep -qE "^wheel:.*[:,]${name}(,|$)" /etc/group && [ -d "/home/${name}" ]; then
+		log "userconf: користувач ${name} готовий (home, група wheel)"
+	else
+		log "userconf: ПОМИЛКА: ${name} без home або не в wheel"
+	fi
+}
+
+apply_wpa() {
+	f=/boot/wpa_supplicant.conf
+	[ -f "$f" ] || return 0
+
+	umask 077
+	tr -d '\r' < "$f" > /etc/wpa_supplicant.conf.new
+	chmod 600 /etc/wpa_supplicant.conf.new
+	mv /etc/wpa_supplicant.conf.new /etc/wpa_supplicant.conf
+	rm -f "$f"
+	sync
+	log "wpa: конфіг перенесено в /etc/wpa_supplicant.conf"
+}
+
+case "$1" in
+	start)
+		if ! mountpoint -q /boot; then
+			mount /boot || { echo "S30bootcfg: /boot не змонтовано"; exit 1; }
+		fi
+		apply_userconf
+		apply_wpa
+		;;
+	stop|restart|reload)
+		;;
+	*)
+		echo "Usage: $0 {start|stop}"
+		exit 1
+esac
+
+exit 0

@@ -1,0 +1,2 @@
+# Усе тут виконується в Linux (WSL, Buildroot, Pi): LF незалежно від core.autocrlf.
+* text eol=lf

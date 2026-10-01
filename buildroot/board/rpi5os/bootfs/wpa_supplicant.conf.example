@@ -1,0 +1,13 @@
+# Скопіюй як wpa_supplicant.conf (без .example) і впиши свою мережу.
+# При старті rpi5os перенесе файл у /etc/wpa_supplicant.conf (права 600)
+# і видалить його звідси: FAT не має прав доступу, тримати пароль тут не можна.
+ctrl_interface=/var/run/wpa_supplicant
+update_config=0
+# Країна обов'язкова для 5 ГГц: без неї частина каналів закрита.
+country=UA
+
+network={
+	ssid="MyNetwork"
+	psk="my-wifi-password"
+	key_mgmt=WPA-PSK
+}

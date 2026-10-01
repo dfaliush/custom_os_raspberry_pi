@@ -1,0 +1,57 @@
+#!/bin/sh
+#
+# S99fallback: якщо за 3 хв після старту немає IP на wlan0 або не працює sshd,
+# вимикаємо завантаження з SD і перезавантажуємось. Pi повертається на SSD
+# (BOOT_ORDER=0xf461: SD → NVMe → USB), а причина лишається в /boot/rpi5os-boot.log.
+#
+# У нас лише Wi-Fi: rpi5os, яка не вийшла в мережу, інакше була б недосяжна.
+# Вимкнути (для дебагу на місці): створити /boot/no-fallback.
+
+. /usr/lib/rpi5os/common.sh
+
+TIMEOUT=180
+STEP=5
+
+network_ready() {
+	ip -4 -o addr show dev wlan0 2>/dev/null | grep -q ' inet ' && pidof sshd >/dev/null
+}
+
+watch() {
+	waited=0
+	while [ $waited -lt $TIMEOUT ]; do
+		if network_ready; then
+			log "OK: $(ip -4 -o addr show dev wlan0 | awk '{print $4}'), sshd працює"
+			return 0
+		fi
+		sleep $STEP
+		waited=$((waited + STEP))
+	done
+
+	log "FAIL: за ${TIMEOUT} с немає IP на wlan0 або sshd. Діагностика нижче."
+	{
+		echo "--- iw dev wlan0 link"; iw dev wlan0 link 2>&1
+		echo "--- wpa_cli status";   wpa_cli -i wlan0 status 2>&1
+		echo "--- ip addr";          ip addr 2>&1
+		echo "--- dmesg (brcm/wlan/cfg80211)"; dmesg | grep -iE 'brcm|wlan|cfg80211' | tail -n 30
+	} >> "$RPI5OS_LOG" 2>&1
+	log "вимикаю завантаження з SD і перезавантажуюсь на SSD"
+	/usr/sbin/boot-ssd && sync && reboot
+}
+
+case "$1" in
+	start)
+		if [ -e /boot/no-fallback ]; then
+			log "автовідкат вимкнено (/boot/no-fallback)"
+			exit 0
+		fi
+		# У фоні: rcS не має чекати 3 хвилини.
+		watch </dev/null >/dev/null 2>&1 &
+		;;
+	stop|restart|reload)
+		;;
+	*)
+		echo "Usage: $0 {start|stop}"
+		exit 1
+esac
+
+exit 0
