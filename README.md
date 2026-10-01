@@ -214,12 +214,20 @@ SSD, тож `sd-first` можна не відкочувати.
 
 ## Перший вхід
 
-Команди для ПК: Git Bash або PowerShell, де вказано. Ім'я користувача й
-пароль ті, що в `userconf.txt`.
+Усі команди виконуються на ПК. Ім'я користувача й пароль ті, що в
+`userconf.txt`. SSH-клієнт уже є в Ubuntu, macOS і Windows 10/11.
+
+**0. Чи видно Pi в мережі.** `rpi5os.local` знаходиться через mDNS:
+
+| ОС | Перевірка | Якщо не знаходиться |
+| --- | --- | --- |
+| Ubuntu | `ping -c 1 rpi5os.local` | на Ubuntu Server немає mDNS-резолвера: `sudo apt install avahi-daemon libnss-mdns` |
+| macOS | `ping -c 1 rpi5os.local` | Bonjour вбудований; перевір, що Mac і Pi в одній мережі |
+| Windows | `ping -n 1 rpi5os.local` | взяти IP пристрою `rpi5os` зі списку DHCP роутера і далі писати його замість `rpi5os.local` |
 
 **1. Якщо rpi5os на цій картці вже стояла раніше,** прибери старий host key.
 Кожна установка генерує нові ключі, і без цього ssh відмовить з `REMOTE HOST
-IDENTIFICATION HAS CHANGED`:
+IDENTIFICATION HAS CHANGED`. Команда однакова на всіх ОС:
 
 ```bash
 ssh-keygen -R rpi5os.local
@@ -232,27 +240,48 @@ ssh user@rpi5os.local
 exit                                        # назад на ПК: наступні команди виконуються там
 ```
 
-**3. Додати свій ключ.** В образі ключів немає. Якщо ключа ще немає й на ПК,
-спершу створи його: `ssh-keygen -t ed25519`. Далі на ПК, у PowerShell:
+**3. Додати свій ключ.** В образі ключів немає.
+
+Ubuntu / macOS:
+
+```bash
+[ -f ~/.ssh/id_ed25519.pub ] || ssh-keygen -t ed25519    # створити ключ, якщо його ще немає
+ssh-copy-id -i ~/.ssh/id_ed25519.pub user@rpi5os.local
+```
+
+Якщо `ssh-copy-id` немає (старі версії macOS):
+
+```bash
+cat ~/.ssh/id_ed25519.pub | ssh user@rpi5os.local "mkdir -p ~/.ssh && chmod 700 ~/.ssh && cat >> ~/.ssh/authorized_keys"
+```
+
+Windows: створити ключ, якщо його ще немає (`ssh-keygen -t ed25519`), потім
+у PowerShell:
 
 ```powershell
 type $env:USERPROFILE\.ssh\id_ed25519.pub | ssh user@rpi5os.local "mkdir -p ~/.ssh && chmod 700 ~/.ssh && cat >> ~/.ssh/authorized_keys"
 ```
 
-Те саме в cmd (`C:\>`): `type %USERPROFILE%\.ssh\id_ed25519.pub | ssh …`, і
-далі так само. У Git Bash: `ssh-copy-id user@rpi5os.local`.
+У cmd (`C:\>`): `type %USERPROFILE%\.ssh\id_ed25519.pub | ssh …`, далі так
+само. У Git Bash працює `ssh-copy-id`, як в Ubuntu.
 
 > Якщо `type … | ssh` у PowerShell 5.1 нічого не дописав (файл лишився
 > порожнім) — встав ключ прямо в команду: `ssh … "echo 'ssh-ed25519 AAAA…' >> ~/.ssh/authorized_keys"`.
 
 **4. Перевірити вхід за ключем і вимкнути паролі.** Перша команда має
-пройти без запиту пароля. `sudo` спитає пароль користувача:
+пройти без запиту пароля. `sudo` спитає пароль користувача.
+
+Ubuntu, macOS, Git Bash і cmd:
 
 ```bash
 ssh -o BatchMode=yes user@rpi5os.local true && ssh -t user@rpi5os.local sudo ssh-keys-only
 ```
 
-У PowerShell 5.1 немає `&&`, там пиши `…; if ($?) { … }`.
+PowerShell 5.1 (`&&` там немає):
+
+```powershell
+ssh -o BatchMode=yes user@rpi5os.local true; if ($?) { ssh -t user@rpi5os.local sudo ssh-keys-only }
+```
 
 `ssh-keys-only` відмовиться, якщо `authorized_keys` порожній: так неможливо
 відрізати собі доступ. Далі вхід лише за ключем: `ssh user@rpi5os.local`.
