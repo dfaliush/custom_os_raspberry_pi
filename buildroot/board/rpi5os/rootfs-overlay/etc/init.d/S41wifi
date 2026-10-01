@@ -1,0 +1,63 @@
+#!/bin/sh
+#
+# S41wifi: wlan0 → wpa_supplicant → DHCP (busybox udhcpc).
+#
+# Не через ifupdown: "inet dhcp" там запускає udhcpc з -n (здатися, якщо
+# lease не прийшов за кілька спроб), а асоціація з точкою доступу буває
+# довшою. Тут udhcpc іде у фон (-b) і пробує, доки не отримає адресу.
+
+. /usr/lib/rpi5os/common.sh
+
+IFACE=wlan0
+CONF=/etc/wpa_supplicant.conf
+WPA_PID=/var/run/wpa_supplicant.${IFACE}.pid
+DHCP_PID=/var/run/udhcpc.${IFACE}.pid
+
+start() {
+	if [ ! -f "$CONF" ]; then
+		log "немає $CONF: поклади wpa_supplicant.conf на boot-розділ"
+		return 1
+	fi
+
+	# eudev підвантажує brcmfmac сам; modprobe тут лише страховка.
+	i=0
+	while [ ! -d /sys/class/net/$IFACE ] && [ $i -lt 20 ]; do
+		[ $i -eq 5 ] && modprobe brcmfmac
+		sleep 1
+		i=$((i + 1))
+	done
+	if [ ! -d /sys/class/net/$IFACE ]; then
+		log "$IFACE не з'явився за 20 с (brcmfmac / firmware?)"
+		return 1
+	fi
+
+	printf "Starting wpa_supplicant on %s: " "$IFACE"
+	if wpa_supplicant -B -D nl80211 -i $IFACE -c "$CONF" -P "$WPA_PID"; then
+		echo "OK"
+	else
+		echo "FAIL"
+		log "wpa_supplicant не стартував"
+		return 1
+	fi
+
+	printf "Starting udhcpc on %s: " "$IFACE"
+	udhcpc -b -S -i $IFACE -x hostname:"$(hostname)" -p "$DHCP_PID" >/dev/null 2>&1
+	echo "OK"
+}
+
+stop() {
+	for p in "$DHCP_PID" "$WPA_PID"; do
+		[ -f "$p" ] && kill "$(cat "$p")" 2>/dev/null
+		rm -f "$p"
+	done
+	return 0
+}
+
+case "$1" in
+	start)   start ;;
+	stop)    stop ;;
+	restart) stop; sleep 1; start ;;
+	*)
+		echo "Usage: $0 {start|stop|restart}"
+		exit 1
+esac

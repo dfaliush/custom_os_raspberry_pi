@@ -78,8 +78,8 @@ respberry_pi_5_OS/
    └─ scripts/
       ├─ build.sh                      # WSL: rsync external на ext4 → clone тегу → defconfig → make
       ├─ flash-to-pi.sh                # запис на mmcblk0 Pi по ssh
-      ├─ release.sh                    # артефакти + gh release
-      └─ pi/sd-boot.sh                 # on|off: увімкнути/вимкнути SD-завантаження з Raspberry Pi OS
+      ├─ dist.sh                       # артефакти релізу в ~/br/dist (реліз: gh release create)
+      └─ pi/flash-sd.sh, sd-boot.sh, boot-order.sh   # виконуються на Raspberry Pi OS
 ```
 
 ## Порядок старту rpi5os
@@ -114,7 +114,10 @@ Wi-Fi єдиний канал, тому rpi5os, яка не вийшла в ме
 4. `wpa_supplicant.conf` генерується **на Pi** з активного NetworkManager-з'єднання
    (`nmcli -s`): PSK не проходить через Windows-машину.
 5. `userconf.txt` створює замовник сам (`openssl passwd -6`), пароль не проходить через агента.
-6. EEPROM: бекап поточного конфігу, потім `BOOT_ORDER=0xf461`.
+6. EEPROM (`pi/boot-order.sh sd-first`): бекап поточного конфігу, потім `BOOT_ORDER=0xf461`.
+   `flashrom` на Pi немає, тож `rpi-eeprom-config --apply` кладе `pieeprom.upd/.sig` і
+   `recovery.bin` у `/boot/firmware` на SSD; bootloader споживає їх на наступному reboot.
+   Це єдиний запис на SSD у всьому процесі, потребує окремого «так» від замовника.
 
 ## Критерії приймання
 
@@ -155,4 +158,4 @@ Yocto (ітерація 2), CI-збірка, A/B-оновлення, підпи�
 3. `scripts/pi/sd-boot.sh`, `flash-to-pi.sh`; запис SD; T0.
 4. `userconf.txt` від замовника; EEPROM; T1–T3, T5.
 5. T6, T7; повернення Pi у стан, який обере замовник.
-6. `release.sh`, реліз після підтвердження.
+6. `dist.sh` + `gh release create`, реліз після підтвердження.

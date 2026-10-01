@@ -1,0 +1,27 @@
+#!/bin/sh
+#
+# ssh-keys-only: вимкнути вхід по SSH за паролем, лишити тільки ключі.
+#
+# Перед цим перевіряє, що в користувача, який викликав sudo, є непорожній
+# ~/.ssh/authorized_keys: інакше після reload у систему вже не зайти.
+
+set -eu
+
+SSHD=/etc/ssh/sshd_config
+USER_NAME="${SUDO_USER:-}"
+
+if [ "$(id -u)" -ne 0 ] || [ -z "$USER_NAME" ]; then
+	echo "Запускай як: sudo ssh-keys-only" >&2
+	exit 1
+fi
+
+HOME_DIR=$(awk -F: -v u="$USER_NAME" '$1 == u {print $6}' /etc/passwd)
+KEYS="${HOME_DIR}/.ssh/authorized_keys"
+if ! grep -qE '^(ssh-|ecdsa-|sk-)' "$KEYS" 2>/dev/null; then
+	echo "У ${KEYS} немає жодного ключа. Спершу ssh-copy-id, потім перевір вхід за ключем." >&2
+	exit 1
+fi
+
+sed -i 's/^PasswordAuthentication yes$/PasswordAuthentication no/' "$SSHD"
+/etc/init.d/S50sshd reload
+echo "Готово: вхід за паролем вимкнено, лишились ключі з ${KEYS}."
