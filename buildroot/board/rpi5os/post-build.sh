@@ -59,6 +59,10 @@ sed -i '/^VARIANT_ID=/d; /^IMAGE_ID=/d; /^IMAGE_VERSION=/d' "${OSR}"
 # the file as configured Wi-Fi. The real config comes from the boot partition.
 rm -f "${TARGET}/etc/wpa_supplicant.conf"
 
+# gdb pretty-printer from the toolchain: useless without gdb, and it embeds the
+# builder's home path.
+rm -f "${TARGET}"/usr/lib/*-gdb.py
+
 # The image is public: fail if any secret slipped in.
 for f in etc/ssh/ssh_host_*key* root/.ssh/authorized_keys etc/wpa_supplicant.conf; do
 	for hit in ${TARGET}/${f}; do
@@ -68,3 +72,15 @@ for f in etc/ssh/ssh_host_*key* root/.ssh/authorized_keys etc/wpa_supplicant.con
 		fi
 	done
 done
+
+# Nor the builder's home path (it carries the user name).
+case "${HOME:-}" in
+	/home/?*)
+		leaks="$(grep -rlF -- "${HOME}/" "${TARGET}" 2>/dev/null || true)"
+		if [ -n "${leaks}" ]; then
+			echo "post-build: в образі є шлях ${HOME}/:" >&2
+			echo "${leaks}" | sed "s|^${TARGET}||" >&2
+			exit 1
+		fi
+		;;
+esac
