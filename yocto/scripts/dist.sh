@@ -36,7 +36,7 @@ mkdir -p "$DIST"
 xz -T0 -9 -c "$IMG" > "$DIST/${NAME}-sdcard.img.xz"
 
 {
-	for l in bitbake openembedded-core meta-raspberrypi; do
+	for l in bitbake openembedded-core meta-raspberrypi meta-openembedded meta-ros; do
 		printf '%-20s %s %s\n' "$l" "$(git -C "$WORK/layers/$l" rev-parse HEAD)" \
 			"$(git -C "$WORK/layers/$l" describe --tags --always 2>/dev/null)"
 	done

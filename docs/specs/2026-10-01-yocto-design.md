@@ -82,7 +82,7 @@ yocto/
 | T3 | Ключ | після додавання ключа вхід з `BatchMode=yes`; після `ssh-keys-only` пароль відхиляється |
 | T4 | Немає секретів | збірка падає, якщо в rootfs є host keys, `authorized_keys`, конфіг Wi-Fi або шлях `/home/<user>`; root locked |
 | T5 | Reboot | ключ і Wi-Fi переживають перезавантаження |
-| T6 | Автовідкат | з неправильним PSK і без конфігу Wi-Fi за ~3 хв Pi на SSD, причина в `rpi5os-boot.log` |
+| T6 | Автовідкат | з неправильним PSK і без конфігу Wi-Fi за ~3 хв Pi на SSD, причина в `rpi5os-boot.log`; після першого успішного виходу в мережу (маркер `/var/lib/rpi5os/network-ok`) відкат роззброєний, збій мережі лише логується (2026-10-08) |
 | T7 | Ручний відкат | `sudo boot-ssd && sudo reboot` → Raspberry Pi OS на NVMe |
 
 ## Реліз

@@ -1,0 +1,13 @@
+[Unit]
+Description=rpi5os: ROS 2 counter publisher and subscriber (counter_pkg)
+After=network.target
+
+[Service]
+Type=simple
+Environment=FASTDDS_BUILTIN_TRANSPORTS=UDPv4
+ExecStart=/bin/sh -c '. /opt/ros/@ROS_DISTRO@/setup.sh && exec ros2 launch counter_pkg counter.launch.py'
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -380,6 +380,9 @@ systemd, локаль для bitbake), і результати T1–T7 на за
 ```text
 custom_os_raspberry_pi/
 ├─ docs/specs/                    # дизайн обох ітерацій
+├─ docs/2026-10-08-ros2-build-guide.md   # ROS 2: усі кроки збірки по порядку
+├─ docs/2026-10-08-continue-build.md     # як продовжити збірку на іншому ПК
+├─ ros2/counter_pkg/              # ROS 2 Jazzy: publisher/subscriber лічильника, див. ros2/README.md
 ├─ yocto/                         # ітерація 2, див. «Yocto-образ»
 │  ├─ meta-rpi5os/                # шар: distro rpi5os, rpi5os-image, скрипти й systemd units
 │  └─ scripts/build.sh, dist.sh   # WSL: від нуля до .wic і артефакти релізу
@@ -508,11 +511,19 @@ ssh user@raspberrypi "sudo bash /dev/shm/boot-order.sh sd-first && sudo reboot"
 
 Wi-Fi тут єдиний канал: rpi5os, яка не вийшла в мережу, була б недосяжна.
 
-- **Автоматично.** `S99fallback` чекає 3 хв IPv4 на `wlan0` і живий `sshd`.
-  Не дочекався → пише діагностику в `/boot/rpi5os-boot.log`, вимикає SD
-  (`boot-ssd`) і перезавантажується. Pi стартує з SSD, лог видно звідти:
-  `sudo bash /dev/shm/sd-boot.sh status`. Вимкнути автовідкат: покласти
-  порожній `no-fallback` на FAT-розділ.
+- **Автоматично, лише до першого успішного виходу в мережу.** `S99fallback`
+  чекає 3 хв IPv4 на `wlan0` і живий `sshd`. Не дочекався → пише діагностику
+  в `/boot/rpi5os-boot.log`, вимикає SD (`boot-ssd`) і перезавантажується. Pi
+  стартує з SSD, лог видно звідти: `sudo bash /dev/shm/sd-boot.sh status`.
+  Щойно мережа запрацювала, скрипт ставить маркер
+  `/var/lib/rpi5os/network-ok`, і далі відсутність мережі лише логується: після
+  відключення світла роутер піднімається довше за Pi, і без маркера Pi сама
+  вимикала б собі SD. Знову озброїти: `sudo rm /var/lib/rpi5os/network-ok`.
+  Вимкнути автовідкат зовсім: покласти порожній `no-fallback` на FAT-розділ.
+- **Якщо rpi5os «не стартує» після перезавантаження:** вийми картку, відкрий
+  `RPI5OS-BOOT` на ПК. Є тека `disabled` і в `rpi5os-boot.log` рядок `FAIL`?
+  Це спрацював автовідкат: перенеси все з `disabled` назад у корінь картки
+  (або з SSD: `sudo bash ~/rpi5os/sd-boot.sh on`), і Pi знову стартує з SD.
 - **Вручну з rpi5os:** `sudo boot-ssd && sudo reboot`.
 - **Знову на rpi5os з SSD:** `sudo bash /dev/shm/sd-boot.sh on && sudo reboot`.
 - **Повністю повернути як було:** `sudo bash /dev/shm/boot-order.sh restore`.

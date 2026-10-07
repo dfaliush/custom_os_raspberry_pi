@@ -96,7 +96,10 @@ Wi-Fi єдиний канал, тому rpi5os, яка не вийшла в ме
 
 - **Автовідкат `S99fallback`:** якщо за 180 с немає IPv4 на `wlan0` або не працює
   `sshd`, діагностика йде в `/boot/rpi5os-boot.log`, потім `boot-ssd` і `reboot`.
-  Вимикається файлом `/boot/no-fallback`.
+  Вимикається файлом `/boot/no-fallback`. Озброєний лише до першого успішного
+  виходу в мережу (маркер `/var/lib/rpi5os/network-ok`): інакше відключення
+  світла, після якого роутер стартує довше за Pi, назавжди вимикало SD
+  (виправлено 2026-10-08).
 - **`boot-ssd`** (вручну або з fallback): переносить усі boot-файли SD у
   `/boot/disabled/`. Без `config.txt` і kernel bootloader іде до наступного
   пристрою з `BOOT_ORDER`, тобто на NVMe. `scripts/pi/sd-boot.sh on` з Raspberry
