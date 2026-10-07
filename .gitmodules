@@ -1,0 +1,8 @@
+[submodule "yocto/layers/meta-openembedded"]
+	path = yocto/layers/meta-openembedded
+	url = https://github.com/openembedded/meta-openembedded.git
+	branch = wrynose
+[submodule "yocto/layers/meta-ros"]
+	path = yocto/layers/meta-ros
+	url = https://github.com/ros/meta-ros.git
+	branch = wrynose
