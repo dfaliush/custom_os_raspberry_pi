@@ -72,7 +72,7 @@ ros2 interface show example_interfaces/msg/Int32
 впали; якщо вони працюють, а список усе одно порожній, скинь кеш графа:
 `ros2 daemon stop`, і повтори команду.
 
-## Service start/stop (додаткове завдання)
+## Service start/stop
 
 Publisher тримає сервіс `/counter_publisher/enable` типу `std_srvs/srv/SetBool`
 (`bool data` → `bool success, string message`): `data: true` запускає таймер,

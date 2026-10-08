@@ -5,7 +5,7 @@
 Що на виході: образ `rpi5os-yocto-v1.1.0-sdcard.img.xz` для Raspberry Pi 5
 з ROS 2 Jazzy, нодами `counter_pkg` і systemd-сервісом, який їх запускає.
 Усе робиться на Windows 10/11 через WSL 2. Buildroot-гілка ROS не має: у
-Buildroot немає пакетів ROS 2, а завдання вимагає окремий meta-layer, тобто Yocto.
+Buildroot немає пакетів ROS 2, а ROS додається окремим meta-layer, тобто через Yocto.
 
 Етапи: 0) WSL → 1) ROS 2 на ПК → 2) пакет `counter_pkg` → 3) Yocto з
 meta-ros → 4) образ на картку і перевірка на Pi → 5) реліз.
@@ -19,9 +19,42 @@ ROS 2 Jazzy ставиться з deb-пакетів лише на Ubuntu 24.04,
 ```powershell
 wsl --update                                   # WSL 2.x → 3.x, у списку з'являється Ubuntu-24.04
 wsl --install Ubuntu-24.04 --location D:\wsl\Ubuntu-24.04 --no-launch
-wsl -d Ubuntu-24.04 -u root -- bash -c 'useradd -m -s /bin/bash -G sudo dmytro; echo "dmytro ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/dmytro; chmod 440 /etc/sudoers.d/dmytro; printf "[user]\ndefault=dmytro\n\n[boot]\nsystemd=true\n" > /etc/wsl.conf'
-wsl --terminate Ubuntu-24.04
+wsl -d Ubuntu-24.04 -u root                    # bash від root у новій Ubuntu
 ```
+
+У цьому bash (однорядковий `bash -c '…'` з PowerShell не підходить: PowerShell
+переписує лапки, і `(ALL)` ламає команду):
+
+```bash
+U=builder                                      # ім'я користувача для збірки, будь-яке
+useradd -m -s /bin/bash -G sudo "$U"
+echo "$U ALL=(ALL) NOPASSWD:ALL" > "/etc/sudoers.d/$U" && chmod 440 "/etc/sudoers.d/$U"
+printf '[user]\ndefault=%s\n\n[boot]\nsystemd=true\n' "$U" > /etc/wsl.conf
+exit
+```
+
+```powershell
+wsl --terminate Ubuntu-24.04                   # наступний запуск уже від цього користувача, з systemd
+```
+
+Старий дистрибутив (`Ubuntu` 22.04) лишається як є. Його `~/yocto/downloads`
+і `~/yocto/sstate` варто скопіювати в новий, тоді збірка не викачує джерела
+вдруге (13 ГБ за ~20 с через спільний `/mnt/wsl`):
+
+Вікно 1, `wsl -d Ubuntu -u root` (старий дистрибутив; вікно не закривати,
+інакше він зупиниться разом з монтуванням):
+
+```bash
+mkdir -p /mnt/wsl/old && mount --bind /home/<user>/yocto /mnt/wsl/old    # <user>: користувач старого дистрибутива
+```
+
+Вікно 2, `wsl -d Ubuntu-24.04`:
+
+```bash
+mkdir -p ~/yocto && rsync -a /mnt/wsl/old/downloads /mnt/wsl/old/sstate ~/yocto/
+```
+
+Потім у вікні 1: `umount /mnt/wsl/old && exit`.
 
 Ресурси для збірки (хост: 8 ядер, 16 ГБ): файл `C:\Users\<ти>\.wslconfig`,
 діє після `wsl --shutdown`.

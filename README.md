@@ -27,6 +27,33 @@ Wi-Fi PSK, host keys (генеруються на першому старті, �
 пристрої). Образ публічний, і це перевіряє `post-build.sh`: збірка падає, якщо
 щось із цього потрапило в rootfs.
 
+## Користувач для першого входу
+
+Користувача за замовчуванням (як колись `pi` / `raspberry`) в образі **немає**.
+`root` заблокований (`root:*` у `/etc/shadow`), а вхід root по SSH вимкнено
+(`PermitRootLogin no`). Єдиний обліковий запис створює той, хто записує
+картку: файл `userconf.txt` на FAT-розділі `RPI5OS-BOOT`, один рядок
+`ім'я:hash` (як його зробити: крок 4 нижче).
+
+| Що | Як |
+| --- | --- |
+| ім'я | те, що до `:` у `userconf.txt`; малі латинські літери, цифри, `_`, `-`. У командах цього README ім'я `user`: підстав своє |
+| пароль | той, з якого зроблено hash `openssl passwd -6` (`$6$…`, приймається і `$5$…`). Сам пароль на картку не потрапляє |
+| права | група `wheel`: `sudo` працює і питає пароль цього ж користувача |
+| home, shell | `/home/<ім'я>`, `/bin/sh` |
+| SSH | вхід за паролем дозволений, доки не виконаєш `sudo ssh-keys-only` (розділ «Перший вхід»); далі лише за ключем |
+
+На першому старті rpi5os створює користувача, переносить hash у
+`/etc/shadow` і **видаляє `userconf.txt` з картки**. Результат записано в
+`RPI5OS-BOOT\rpi5os-boot.log` (рядок `userconf: користувач … готовий`).
+
+- **Без `userconf.txt` увійти неможливо.** Поклади файл на FAT і
+  перезавантаж Pi: файл обробляється на кожному старті, якщо він є на картці.
+- **Забув пароль:** так само, новий `userconf.txt` з тим самим ім'ям
+  перезапише пароль (ключі в `~/.ssh` лишаються).
+- `userconf.txt.example` на FAT лише показує формат: hash у ньому
+  заглушка, з якою не підходить жоден пароль.
+
 ## Встановити готовий образ на microSD
 
 Для нового користувача: нічого не збираємо, беремо образ із
@@ -89,8 +116,10 @@ if [ -n "$L" ]; then B=/$L; ls "$B"; else unset B; echo "RPI5OS-BOOT не зна
 `sudo mount /dev/sdX1 /mnt && B=/mnt`, а файли в кроках 4–5 писати через
 `sudo tee` замість `>`.
 
-**4. Користувач і пароль.** Ім'я може складатися з малих латинських літер,
-цифр, `_` і `-`. Пароль не зберігається: у файл іде тільки sha512-crypt hash.
+**4. Користувач і пароль** (стандартного користувача немає, див. «Користувач
+для першого входу»). Ім'я може складатися з малих латинських літер, цифр, `_`
+і `-`; замість `user` у команді нижче можна підставити своє. Пароль не
+зберігається: у файл іде тільки sha512-crypt hash.
 
 ```bash
 read -rsp 'Пароль: ' P; echo
@@ -294,15 +323,19 @@ ssh -o BatchMode=yes user@rpi5os.local true; if ($?) { ssh -t user@rpi5os.local 
 
 | Що | Buildroot | Yocto |
 | --- | --- | --- |
-| файл релізу | `rpi5os-buildroot-v1.0.0-sdcard.img.xz` | `rpi5os-yocto-v1.0.0-sdcard.img.xz` |
-| тег релізу | `buildroot-v1.0.0` | `yocto-v1.0.0` |
+| файл релізу | `rpi5os-buildroot-v1.0.0-sdcard.img.xz` | `rpi5os-yocto-v1.1.0-sdcard.img.xz` (з ROS 2) |
+| тег релізу | `buildroot-v1.0.0` | `yocto-v1.1.0` |
 | адреса в мережі | `rpi5os.local` | `rpi5os-yocto.local` |
 
 **ROS 2 (з `yocto-v1.1.0`).** Yocto-образ містить ROS 2 Jazzy з окремого шару
 `yocto/meta-rpi5os-ros` (meta-ros підключено submodule): CLI `ros2`,
 `demo_nodes_py` і ноди лічильника `counter_pkg` (`ros2/`), які стартують
-systemd-сервісом `rpi5os-counter.service`. Після входу на Pi: `ros2 node list`,
-`ros2 topic echo /counter`, `ros2 run counter_pkg counter_control stop|start`.
+systemd-сервісом `rpi5os-counter.service`. Після входу на Pi
+(`ssh user@rpi5os-yocto.local`): `ros2 node list`, `ros2 topic echo /counter`,
+`ros2 run counter_pkg counter_control stop|start`. Оточення ROS підключає
+`/etc/profile.d/ros2.sh` у login-шеллі; разова команда через ssh його не
+читає (`sh: ros2: not found`), тому так:
+`ssh user@rpi5os-yocto.local '. /etc/profile; ros2 node list'`.
 Збірка і перевірка крок за кроком:
 [`docs/2026-10-08-ros2-build-guide.md`](docs/2026-10-08-ros2-build-guide.md),
 ноди на ПК: [`ros2/README.md`](ros2/README.md).
@@ -344,28 +377,33 @@ Ubuntu / macOS: `ssh-copy-id user@rpi5os-yocto.local`, потім другий �
 
 ```bash
 ssh user@rpi5os-yocto.local 'grep -E "^NAME|VERSION_ID|IMAGE_ID" /etc/os-release; uname -r; systemctl is-system-running'
-# NAME=rpi5os, VERSION_ID=1.0.0, IMAGE_ID=rpi5os-yocto, kernel 6.18.x, running
+# NAME=rpi5os, VERSION_ID=1.1.0, IMAGE_ID=rpi5os-yocto, kernel 6.18.x, running
 ```
 
 Тут systemd, тож доступні `systemctl`, `journalctl -b` і `networkctl`.
 
-**Зібрати** (перший раз кілька годин і ~100–150 ГБ на ext4, далі
-інкрементально):
+**Зібрати** (перший раз 1–3 години і ~50–100 ГБ на ext4, далі
+інкрементально). Збірка йде в окремій WSL з Ubuntu 24.04 (та сама, де ROS 2
+Jazzy для ПК); як її поставити на диск D:: guide, розділ 0. Хост-пакети:
 
 ```bash
 sudo apt install gawk wget git diffstat unzip texinfo gcc build-essential chrpath socat cpio \
 	python3 python3-pip python3-pexpect xz-utils debianutils iputils-ping python3-git \
-	python3-jinja2 python3-subunit zstd liblz4-tool file locales libacl1
+	python3-jinja2 python3-subunit zstd liblz4-tool file locales libacl1 rsync
 ```
 
 ```powershell
-wsl -d Ubuntu -- bash yocto/scripts/build.sh
-wsl -d Ubuntu -- bash yocto/scripts/dist.sh
+wsl -d Ubuntu-24.04 -- bash yocto/scripts/build.sh -p    # лише парсинг, хвилини
+wsl -d Ubuntu-24.04 -- bash yocto/scripts/build.sh
+wsl -d Ubuntu-24.04 -- bash yocto/scripts/dist.sh
 ```
 
 `build.sh` бере `openembedded-core` і `bitbake` на тегу `yocto-6.0.3`,
-`meta-raspberrypi` на прибитому коміті, копіює `yocto/meta-rpi5os` у
-`~/yocto/layers` і запускає `bitbake rpi5os-image`. Образ:
+`meta-raspberrypi` на прибитому коміті, `meta-openembedded` і `meta-ros` на
+комітах submodules з `yocto/layers/` (`git submodule update` не потрібен:
+коміти читаються з git-індексу), копіює `yocto/meta-rpi5os`,
+`yocto/meta-rpi5os-ros` і `ros2/` у `~/yocto` і запускає `bitbake
+rpi5os-image`. Образ:
 `~/yocto/build/tmp/deploy/images/raspberrypi5/rpi5os-image-raspberrypi5.rootfs.wic`,
 артефакти релізу — у `~/yocto/dist/`: `.img.xz`, `SHA256SUMS`, `layers.txt`
 (ревізії шарів і `local.conf`), `license.manifest`, `.spdx.json` (SBOM).
@@ -382,7 +420,7 @@ systemd, локаль для bitbake), і результати T1–T7 на за
 | Основна ОС | Raspberry Pi OS trixie на NVMe SSD, `ssh user@raspberrypi`. **SSD не чіпаємо** |
 | rpi5os | на microSD у слоті тієї ж Pi (`/dev/mmcblk0`) |
 | Мережа | тільки Wi-Fi |
-| Збірка | Windows 11 + WSL2 Ubuntu 22.04 (24 ядра, 31 ГБ RAM) |
+| Збірка | Windows 11 + WSL2 (24 ядра, 31 ГБ RAM): Buildroot в `Ubuntu` 22.04, Yocto і ROS 2 в `Ubuntu-24.04` на D: |
 
 ## Структура
 
@@ -393,7 +431,9 @@ custom_os_raspberry_pi/
 ├─ docs/2026-10-08-continue-build.md     # як продовжити збірку на іншому ПК
 ├─ ros2/counter_pkg/              # ROS 2 Jazzy: publisher/subscriber лічильника, див. ros2/README.md
 ├─ yocto/                         # ітерація 2, див. «Yocto-образ»
-│  ├─ meta-rpi5os/                # шар: distro rpi5os, rpi5os-image, скрипти й systemd units
+│  ├─ meta-rpi5os/                # шар: distro rpi5os, rpi5os-image, скрипти, systemd units, panic=10 + watchdog
+│  ├─ meta-rpi5os-ros/            # шар ROS 2: рецепт counter-pkg, bbappend образу, rpi5os-counter.service
+│  ├─ layers/                     # submodules: meta-openembedded, meta-ros (гілка wrynose)
 │  └─ scripts/build.sh, dist.sh   # WSL: від нуля до .wic і артефакти релізу
 └─ buildroot/                     # BR2_EXTERNAL, name: RPI5OS
    ├─ configs/rpi5os_defconfig    # raspberrypi5_defconfig + наші зміни (розмічено в файлі)
@@ -523,7 +563,7 @@ Wi-Fi тут єдиний канал: rpi5os, яка не вийшла в мер
 - **Автоматично, лише до першого успішного виходу в мережу.** `S99fallback`
   чекає 3 хв IPv4 на `wlan0` і живий `sshd`. Не дочекався → пише діагностику
   в `/boot/rpi5os-boot.log`, вимикає SD (`boot-ssd`) і перезавантажується. Pi
-  стартує з SSD, лог видно звідти: `sudo bash /dev/shm/sd-boot.sh status`.
+  стартує з SSD, лог видно звідти: `sudo bash ~/rpi5os/sd-boot.sh status`.
   Щойно мережа запрацювала, скрипт ставить маркер
   `/var/lib/rpi5os/network-ok`, і далі відсутність мережі лише логується: після
   відключення світла роутер піднімається довше за Pi, і без маркера Pi сама
@@ -534,8 +574,12 @@ Wi-Fi тут єдиний канал: rpi5os, яка не вийшла в мер
   Це спрацював автовідкат: перенеси все з `disabled` назад у корінь картки
   (або з SSD: `sudo bash ~/rpi5os/sd-boot.sh on`), і Pi знову стартує з SD.
 - **Вручну з rpi5os:** `sudo boot-ssd && sudo reboot`.
-- **Знову на rpi5os з SSD:** `sudo bash /dev/shm/sd-boot.sh on && sudo reboot`.
-- **Повністю повернути як було:** `sudo bash /dev/shm/boot-order.sh restore`.
+- **Знову на rpi5os з SSD:** `sudo bash ~/rpi5os/sd-boot.sh on && sudo reboot`.
+- **Повністю повернути як було:** `sudo bash ~/rpi5os/boot-order.sh restore`.
+
+Скрипти в `~/rpi5os/` з кроку 1 розділу «Raspberry Pi OS уже на SSD». Копії,
+які кладе в `/dev/shm` `flash-to-pi.sh`, живуть у RAM і зникають після
+перезавантаження.
 
 «Вимкнути SD» означає перенести boot-файли в `disabled/` на тому ж FAT:
 без `config.txt` і kernel bootloader вважає картку порожньою і йде далі по
