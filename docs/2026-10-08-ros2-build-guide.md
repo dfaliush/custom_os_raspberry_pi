@@ -1,6 +1,6 @@
 # Як зібрати rpi5os з ROS 2: команди по порядку
 
-Дата: 2026-10-08 · Статус: чернетка, доповнюється після першої збірки.
+Дата: 2026-10-08 · Статус: перевірено збіркою і запуском на Raspberry Pi 5.
 
 Що на виході: образ `rpi5os-yocto-v1.1.0-sdcard.img.xz` для Raspberry Pi 5
 з ROS 2 Jazzy, нодами `counter_pkg` і systemd-сервісом, який їх запускає.
@@ -143,8 +143,13 @@ wsl -d Ubuntu-24.04 -- bash yocto/scripts/build.sh               # 3. повни
 wsl -d Ubuntu-24.04 -- bash yocto/scripts/dist.sh                # 4. артефакти релізу в ~/yocto/dist
 ```
 
-Перша збірка на 8 ядрах і 12 ГБ: _TODO: тривалість і розмір після збірки_.
-Повторні збірки беруть sstate з `~/yocto/sstate`.
+Перша збірка з ROS (WSL Ubuntu 24.04, 24 ядра, 31 ГБ, `build.sh` ставить 15
+паралельних задач; `downloads` і `sstate` перенесені з попередньої збірки без ROS):
+**51 хв**, 10 689 задач, 0 помилок. Образ `.wic` 766 МБ, `.img.xz` 94 МБ,
+`~/yocto` після збірки 41 ГБ (`downloads` 12, `sstate` 11, `build/tmp` 19).
+Без перенесеного кешу native-частина й завантаження додають ще близько години.
+Повторні збірки беруть sstate з `~/yocto/sstate`: правка одного рецепта
+перезбирає образ за хвилини (31 задача з 10 689).
 
 ## 4. Картка і перевірка на Pi
 
@@ -162,7 +167,68 @@ ros2 run counter_pkg counter_control start                  # counter started at
 ros2 run demo_nodes_py talker                               # офіційна demo-нода, Ctrl-C
 ```
 
-_TODO: фактичний вивід після перевірки на залізі._
+Фактичний вивід на Raspberry Pi 5 (образ з `SHA256SUMS` релізу, записаний
+`flash-to-pi.sh`, sha256 SD звірено; скорочено):
+
+```text
+$ grep -E '^(NAME|VERSION_ID|IMAGE_ID)' /etc/os-release
+NAME="rpi5os"
+VERSION_ID=1.1.0
+IMAGE_ID="rpi5os-yocto"
+$ systemctl status rpi5os-counter.service
+     Active: active (running)
+             ├─357 python3 /opt/ros/jazzy/bin/ros2 launch counter_pkg counter.launch.py
+             ├─388 /usr/bin/python3 /opt/ros/jazzy/lib/counter_pkg/counter_publisher --ros-args
+             └─389 /usr/bin/python3 /opt/ros/jazzy/lib/counter_pkg/counter_subscriber --ros-args
+$ ros2 node list
+/counter_publisher
+/counter_subscriber
+$ ros2 topic list -t
+/counter [example_interfaces/msg/Int32]
+$ ros2 topic info /counter
+Publisher count: 1
+Subscription count: 1
+$ ros2 service list -t | grep enable
+/counter_publisher/enable [std_srvs/srv/SetBool]
+$ ros2 topic echo /counter --once
+data: 58
+$ ros2 topic hz /counter
+average rate: 1.000
+$ ros2 run counter_pkg counter_control stop
+[counter_control]: counter stopped at 65
+$ ros2 run counter_pkg counter_control stop
+[counter_control]: counter already stopped
+$ ros2 run counter_pkg counter_control start
+[counter_control]: counter started at 66
+$ ros2 service call /counter_publisher/enable std_srvs/srv/SetBool "{data: false}"
+std_srvs.srv.SetBool_Response(success=True, message='counter stopped at 67')
+$ ros2 run demo_nodes_py talker & ros2 run demo_nodes_py listener
+[talker]: Publishing: "Hello World: 0"
+[listener]: I heard: [Hello World: 0]
+$ journalctl -u rpi5os-counter.service
+[counter_publisher]: published 466
+[counter_subscriber]: I heard: 466
+```
+
+Поки лічильник зупинений, `ros2 topic echo /counter` нічого не отримує; після
+`start` subscriber продовжує без попередження `gap`.
+
+Пастки, знайдені на залізі:
+
+- **systemd-сервіс без `HOME`.** System-сервіси без `User=` не мають `$HOME`,
+  а rcl розгортає каталог логів `~/.ros/log` саме через нього: обидві ноди
+  падали в `rclpy.init()` з `Failed to get logging directory`. Сам `ros2
+  launch` (Python) домашній каталог знаходить і без `HOME`, тому на ПК і в
+  `ros2 run` від користувача проблема не видна. У юніті `Environment=HOME=/root`.
+- **`ros2 launch` виходить з кодом 0,** коли всі його ноди померли, тож
+  `Restart=on-failure` такий збій не перезапускав і systemd писав
+  `Deactivated successfully`. У юніті `Restart=always`.
+- **В образі busybox:** немає `timeout`, `pkill`, `lsblk`, `bash`; `head` лише
+  з `-n N`. Для команд, що працюють до Ctrl-C (`ros2 topic hz`), у скриптах
+  запускати у фоні й зупиняти `kill -TERM` (фонові процеси `sh` ігнорують SIGINT).
+- **Не перезаписувати SD, з якої працює система.** Пишемо з Raspberry Pi OS
+  на SSD через `flash-to-pi.sh`: образ у `/dev/shm`, після запису sha256
+  картки звіряється з образом.
 
 ## 5. Реліз
 

@@ -5,8 +5,12 @@ After=network.target
 [Service]
 Type=simple
 Environment=FASTDDS_BUILTIN_TRANSPORTS=UDPv4
+# System services get no $HOME, and rcl expands its log dir ~/.ros/log with it:
+# without HOME every node dies in rclpy.init() ("Failed to get logging directory").
+Environment=HOME=/root
 ExecStart=/bin/sh -c '. /opt/ros/@ROS_DISTRO@/setup.sh && exec ros2 launch counter_pkg counter.launch.py'
-Restart=on-failure
+# ros2 launch exits 0 once all its nodes have died: on-failure would not restart.
+Restart=always
 RestartSec=5
 
 [Install]

@@ -298,6 +298,15 @@ ssh -o BatchMode=yes user@rpi5os.local true; if ($?) { ssh -t user@rpi5os.local 
 | тег релізу | `buildroot-v1.0.0` | `yocto-v1.0.0` |
 | адреса в мережі | `rpi5os.local` | `rpi5os-yocto.local` |
 
+**ROS 2 (з `yocto-v1.1.0`).** Yocto-образ містить ROS 2 Jazzy з окремого шару
+`yocto/meta-rpi5os-ros` (meta-ros підключено submodule): CLI `ros2`,
+`demo_nodes_py` і ноди лічильника `counter_pkg` (`ros2/`), які стартують
+systemd-сервісом `rpi5os-counter.service`. Після входу на Pi: `ros2 node list`,
+`ros2 topic echo /counter`, `ros2 run counter_pkg counter_control stop|start`.
+Збірка і перевірка крок за кроком:
+[`docs/2026-10-08-ros2-build-guide.md`](docs/2026-10-08-ros2-build-guide.md),
+ноди на ПК: [`ros2/README.md`](ros2/README.md).
+
 Тобто в командах розділів «Встановити готовий образ», «Raspberry Pi OS уже на
 SSD» і «Перший вхід» підстав ці імена. Мітка FAT (`RPI5OS-BOOT`), файли
 `userconf.txt` і `wpa_supplicant.conf`, `ssh-keys-only`, `boot-ssd`, автовідкат
