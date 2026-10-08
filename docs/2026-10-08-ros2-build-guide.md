@@ -228,7 +228,18 @@ $ journalctl -u rpi5os-counter.service
   запускати у фоні й зупиняти `kill -TERM` (фонові процеси `sh` ігнорують SIGINT).
 - **Не перезаписувати SD, з якої працює система.** Пишемо з Raspberry Pi OS
   на SSD через `flash-to-pi.sh`: образ у `/dev/shm`, після запису sha256
-  картки звіряється з образом.
+  картки звіряється з образом. Спроба записати SD «на ходу» з самої rpi5os
+  повісила Pi: після перезапису кореня процес (найімовірніше PID 1) не зміг
+  дочитати свій код, ядро зависло, кулер на повну, мережі немає, допомогло
+  лише вимкнути живлення.
+- **Pi не має висіти вічно.** Тому в образі (`meta-rpi5os`) `panic=10` у
+  `cmdline.txt` (bbappend `rpi-cmdline`): після kernel panic перезавантаження
+  за 10 с; і апаратний watchdog `bcm2835-wdt` через systemd
+  (`/etc/systemd/system.conf.d/10-rpi5os-watchdog.conf`,
+  `RuntimeWatchdogSec=10s`): якщо PID 1 перестав відповідати, плату скидає
+  залізо. Перевірка: `cat /proc/sys/kernel/panic` → `10`,
+  `cat /sys/class/watchdog/watchdog0/state` → `active`; тест паніки
+  `echo c | sudo tee /proc/sysrq-trigger` → Pi сама повертається в мережу.
 
 ## 5. Реліз
 

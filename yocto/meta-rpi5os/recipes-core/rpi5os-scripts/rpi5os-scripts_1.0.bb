@@ -12,6 +12,7 @@ SRC_URI = " \
     file://rpi5os-fallback.service \
     file://50-wlan0.network \
     file://10-rpi5os.conf \
+    file://10-rpi5os-watchdog.conf \
 "
 S = "${UNPACKDIR}"
 
@@ -35,6 +36,9 @@ do_install () {
 
 	install -d ${D}${sysconfdir}/ssh/sshd_config.d
 	install -m 0644 ${S}/10-rpi5os.conf ${D}${sysconfdir}/ssh/sshd_config.d/
+
+	install -d ${D}${sysconfdir}/systemd/system.conf.d
+	install -m 0644 ${S}/10-rpi5os-watchdog.conf ${D}${sysconfdir}/systemd/system.conf.d/
 
 	# wpa_supplicant ships the template unit disabled; enable it for wlan0.
 	install -d ${D}${sysconfdir}/systemd/system/multi-user.target.wants
