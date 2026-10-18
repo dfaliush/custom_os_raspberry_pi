@@ -1,7 +1,12 @@
 SUMMARY = "rpi5os: YOLO (NCNN) object detection from the camera, rpi5os-detect"
 HOMEPAGE = "https://github.com/dfaliush/custom_os_raspberry_pi"
-LICENSE = "MIT"
-LIC_FILES_CHKSUM = "file://${COMMON_LICENSE_DIR}/MIT;md5=0835ade698e0bcf8506ecda2f7b4f302"
+# The code is MIT; the model in /usr/share/rpi5os-vision/model is YOLO11 weights
+# fine-tuned with Ultralytics, AGPL-3.0 (its metadata.yaml says so too).
+LICENSE = "MIT & AGPL-3.0-only"
+LIC_FILES_CHKSUM = " \
+    file://${COMMON_LICENSE_DIR}/MIT;md5=0835ade698e0bcf8506ecda2f7b4f302 \
+    file://${COMMON_LICENSE_DIR}/AGPL-3.0-only;md5=73f1eb20517c55bf9493b7dd6e480788 \
+"
 
 inherit python_setuptools_build_meta
 
