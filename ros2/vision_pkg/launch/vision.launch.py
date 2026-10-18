@@ -32,11 +32,17 @@ def generate_launch_description():
                               description='empty: any class'),
         DeclareLaunchArgument('stream_port', default_value='8000',
                               description='MJPEG with boxes; 0 disables'),
+        # respawn: a node that dies comes back in 2 s. Without it the others
+        # keep running, so systemd never restarts the launch, and a crashed
+        # detector left decision_node in STOP for good.
         Node(package='vision_pkg', executable='camera_node', output='screen',
+             respawn=True, respawn_delay=2.0,
              parameters=[{'source': arg('source')}]),
         Node(package='vision_pkg', executable='detector_node', output='screen',
+             respawn=True, respawn_delay=2.0,
              parameters=[{'model_dir': arg('model_dir'),
                           'target_class': arg('target_class'),
                           'stream_port': ParameterValue(arg('stream_port'), value_type=int)}]),
-        Node(package='vision_pkg', executable='decision_node', output='screen'),
+        Node(package='vision_pkg', executable='decision_node', output='screen',
+             respawn=True, respawn_delay=2.0),
     ])
