@@ -7,7 +7,7 @@ inherit python_setuptools_build_meta
 
 # Sources straight from the repo: RPI5OS_VISION_SRC is the vision/ dir (see layer.conf).
 FILESEXTRAPATHS:prepend := "${RPI5OS_VISION_SRC}/..:"
-SRC_URI = "file://vision/"
+SRC_URI = "file://vision/ file://60-rpi5os-camera.rules"
 S = "${UNPACKDIR}/vision"
 
 # The model in the image; a model copied to /var/lib/rpi5os-vision/model wins
@@ -17,7 +17,9 @@ do_install:append () {
 	for f in model.ncnn.param model.ncnn.bin metadata.yaml; do
 		install -m 0644 ${S}/models/current/$f ${D}${datadir}/rpi5os-vision/model/
 	done
+	# libcamera needs /dev/dma_heap/* for a non-root user too (group video).
+	install -D -m 0644 ${UNPACKDIR}/60-rpi5os-camera.rules ${D}${sysconfdir}/udev/rules.d/60-rpi5os-camera.rules
 }
 
-FILES:${PN} += "${datadir}/rpi5os-vision ${localstatedir}/lib/rpi5os-vision"
+FILES:${PN} += "${datadir}/rpi5os-vision ${localstatedir}/lib/rpi5os-vision ${sysconfdir}/udev/rules.d"
 RDEPENDS:${PN} = "libcamera-apps python3-modules python3-numpy python3-opencv python3-ncnn python3-pyyaml"
