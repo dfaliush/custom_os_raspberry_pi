@@ -323,8 +323,8 @@ ssh -o BatchMode=yes user@rpi5os.local true; if ($?) { ssh -t user@rpi5os.local 
 
 | Що | Buildroot | Yocto |
 | --- | --- | --- |
-| файл релізу | `rpi5os-buildroot-v1.0.0-sdcard.img.xz` | `rpi5os-yocto-v1.1.0-sdcard.img.xz` (з ROS 2) |
-| тег релізу | `buildroot-v1.0.0` | `yocto-v1.1.0` |
+| файл релізу | `rpi5os-buildroot-v1.0.0-sdcard.img.xz` | `rpi5os-yocto-v1.2.0-sdcard.img.xz` (ROS 2, камера, розпізнавання) |
+| тег релізу | `buildroot-v1.0.0` | `yocto-v1.2.0` (попередні: `yocto-v1.1.0` — ROS 2, `yocto-v1.0.0`) |
 | адреса в мережі | `rpi5os.local` | `rpi5os-yocto.local` |
 
 **ROS 2 (з `yocto-v1.1.0`).** Yocto-образ містить ROS 2 Jazzy з окремого шару
@@ -377,7 +377,7 @@ Ubuntu / macOS: `ssh-copy-id user@rpi5os-yocto.local`, потім другий �
 
 ```bash
 ssh user@rpi5os-yocto.local 'grep -E "^NAME|VERSION_ID|IMAGE_ID" /etc/os-release; uname -r; systemctl is-system-running'
-# NAME=rpi5os, VERSION_ID=1.1.0, IMAGE_ID=rpi5os-yocto, kernel 6.18.x, running
+# NAME=rpi5os, VERSION_ID=1.2.0, IMAGE_ID=rpi5os-yocto, kernel 6.18.x, running
 ```
 
 Тут systemd, тож доступні `systemctl`, `journalctl -b` і `networkctl`.
@@ -424,6 +424,25 @@ IMX219, рахує його положення відносно центру к�
 | базовий | Raspberry Pi OS (SSD) | `cam stop`, потім `~/venv/bin/python -m rpi5os_vision.run --model models/current --target-class duck_pirate --stream 8000` у `~/vision` | [`vision/README.md`](vision/README.md) |
 | просунутий | rpi5os 1.2.0 на SD | `sudo systemctl stop rpi5os-vision`, потім `rpi5os-detect --target-class duck_pirate --stream 8000` | там само |
 | ускладнений | rpi5os 1.2.0 на SD | нічого: `rpi5os-vision.service` стартує сам | [`ros2/README.md`](ros2/README.md) |
+
+**Готовий образ** — реліз
+[`yocto-v1.2.0`](https://github.com/dfaliush/custom_os_raspberry_pi/releases/tag/yocto-v1.2.0).
+Запис і перший вхід — як у розділах «Встановити готовий образ» і «Yocto-образ»:
+
+```bash
+curl -LO https://github.com/dfaliush/custom_os_raspberry_pi/releases/download/yocto-v1.2.0/rpi5os-yocto-v1.2.0-sdcard.img.xz
+curl -LO https://github.com/dfaliush/custom_os_raspberry_pi/releases/download/yocto-v1.2.0/SHA256SUMS
+sha256sum -c SHA256SUMS --ignore-missing    # rpi5os-yocto-v1.2.0-sdcard.img.xz: OK
+```
+
+Камера має бути в роз'ємі **CAM/DISP 0** (`dtoverlay=imx219,cam0`). Перевірка
+після входу:
+
+```bash
+rpicam-hello --list-cameras                  # 0 : imx219 [3280x2464 10-bit] (…)
+systemctl is-active rpi5os-vision            # active
+ros2 topic hz /decision                      # average rate: 10.000
+```
 
 В усіх трьох випадках картинка з рамками — `http://<pi>.local:8000/`.
 Рішення наживо на SD:
@@ -747,8 +766,19 @@ Wi-Fi тут єдиний канал: rpi5os, яка не вийшла в мер
 
 ## Реліз
 
-Тег `buildroot-v<VERSION>` (Yocto-ітерація отримає `yocto-v<VERSION>`).
-Assets з `~/br/dist/`: `.img.xz`, `SHA256SUMS`, `buildroot.config`,
-`legal-info-manifest.csv` (пакети, версії, ліцензії).
+Buildroot: тег `buildroot-v<VERSION>`, assets з `~/br/dist/`: `.img.xz`,
+`SHA256SUMS`, `buildroot.config`, `legal-info-manifest.csv` (пакети, версії,
+ліцензії).
+
+Yocto: тег `yocto-v<DISTRO_VERSION>` (з `yocto/meta-rpi5os/conf/distro/rpi5os.conf`),
+assets з `~/yocto/dist/` після `dist.sh`: `.img.xz`, `SHA256SUMS`,
+`layers.txt`, `license.manifest`, `.spdx.json`:
+
+```bash
+cd ~/yocto/dist && sha256sum -c SHA256SUMS
+gh release create yocto-v1.2.0 --repo dfaliush/custom_os_raspberry_pi --target master \
+	--title "rpi5os Yocto v1.2.0 (камера, розпізнавання, ROS 2)" --notes-file notes.md \
+	rpi5os-yocto-v1.2.0-sdcard.img.xz SHA256SUMS layers.txt license.manifest rpi5os-yocto-v1.2.0.spdx.json
+```
 
 Як записати реліз без збірки: розділ «Встановити готовий образ на microSD».

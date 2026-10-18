@@ -1,6 +1,7 @@
 # rpi5os, ітерація 3: розпізнавання об'єкта камерою (YOLO + NCNN + ROS 2)
 
-Дата: 2026-10-18 · Статус: дизайн погоджено в розмові, spec чекає на перегляд.
+Дата: 2026-10-18 · Статус: реалізовано, перевірено на Raspberry Pi 5, реліз
+`yocto-v1.2.0`. Відхилення від дизайну — у розділі «Знайдено під час реалізації».
 
 ## Мета
 
@@ -223,3 +224,18 @@ camera_node ──/camera/image_raw──► detector_node ──/target──�
    V5–V8.
 4. Скрипти `train/` (паралельно з розміткою), своя модель → V1, V3, V10.
 5. Реліз 1.2.0, README, заміри.
+
+## Знайдено під час реалізації
+
+| Що в дизайні | Що вийшло | Чому |
+| --- | --- | --- |
+| libcamera з `meta-multimedia` | форк `raspberrypi/libcamera` `v0.6.0+rpt20251202` (bbappend) | upstream 0.6.0 не бачить камеру на ядрі Raspberry Pi: інші імена й зв'язки `rp1-cfe` (`Unable to acquire a CFE instance`) |
+| `rpicam-apps` як є | патч під libcamera 0.6 (`properties::Model` — `string_view`) | 1.9.0 з `meta-raspberrypi` не компілюється |
+| ncnn 4 потоки | 2 потоки | на 4 Pi 5 вимикався: піки струму ядра 9,2 А (PMIC); на 2 — 5,7 А, 28–30 fps |
+| QoS `qos_profile_sensor_data` | best effort, KEEP_LAST 1 | профіль тримає 5 кадрів: детектор працював би із застарілими |
+| ноди без перезапуску | `respawn=True`, 2 с | після падіння детектора launch жив, systemd не перезапускав, STOP назавжди |
+| — | udev `dma_heap` → група `video`, користувач у `video` | інакше libcamera від користувача: `Could not open any dmaHeap device` |
+| V8 «STOP ≤ 0,5 с» | ≤ 0,6 с (виміряно 0,565 с) | `stale_timeout` 0,5 с + один такт таймера 10 Гц |
+| модель ~5 МБ | 10,5 МБ (fp32, типовий експорт Ultralytics) | — |
+| `rpi5os-detect --imgsz` | розмір з `metadata.yaml` | модель експортована під один розмір |
+| ліцензія MIT | `MIT & AGPL-3.0-only` | ваги донавчені з Ultralytics |
