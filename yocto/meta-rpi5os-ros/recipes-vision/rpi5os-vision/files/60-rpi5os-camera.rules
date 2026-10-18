@@ -1,0 +1,3 @@
+# libcamera allocates frame buffers from /dev/dma_heap/*, root-only by default.
+# Group video, as on Raspberry Pi OS (the userconf.txt user is in video).
+SUBSYSTEM=="dma_heap", GROUP="video", MODE="0660"

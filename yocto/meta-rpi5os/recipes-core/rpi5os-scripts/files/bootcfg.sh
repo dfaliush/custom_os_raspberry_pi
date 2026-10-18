@@ -32,6 +32,11 @@ apply_userconf() {
 
 	id "$name" >/dev/null 2>&1 || useradd -m -s /bin/sh "$name"
 	usermod -a -G wheel "$name"
+	# Camera devices (/dev/media*, /dev/video*, /dev/dma_heap/*) are group video,
+	# as on Raspberry Pi OS; the group exists only in images with the camera.
+	if grep -q '^video:' /etc/group; then
+		usermod -a -G video "$name"
+	fi
 	usermod -p "$hash" "$name"
 
 	if id -nG "$name" | grep -qw wheel && [ -d "/home/$name" ]; then
