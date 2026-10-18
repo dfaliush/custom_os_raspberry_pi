@@ -61,7 +61,7 @@ def nms(boxes, scores, cls, iou):
 
 
 class Detector:
-    def __init__(self, model, conf=0.25, iou=0.45, threads=4):
+    def __init__(self, model, conf=0.25, iou=0.45, threads=2):
         self.model, self.conf, self.iou = model, conf, iou
         self.net = ncnn.Net()
         self.net.opt.use_vulkan_compute = False

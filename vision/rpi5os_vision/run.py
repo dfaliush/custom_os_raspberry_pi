@@ -24,7 +24,9 @@ def parse(argv):
     ap.add_argument("--height", type=int, default=480)
     ap.add_argument("--fps", type=int, default=30)
     ap.add_argument("--conf", type=float, default=0.25)
-    ap.add_argument("--threads", type=int, default=4)
+    # 2, not 4: with all 4 cores in ncnn the Pi 5's core current peaked at
+    # 9.2 A and the board powered off; 2 threads peak at 5.7 A, ~28 fps.
+    ap.add_argument("--threads", type=int, default=2, help="потоки ncnn (4 вимикали Pi 5 під навантаженням)")
     ap.add_argument("--target-class", default="", help="клас цілі; порожньо — будь-який")
     ap.add_argument("--stream", type=int, default=0, metavar="PORT", help="MJPEG з рамками; 0 — вимкнено")
     ap.add_argument("--csv", help="метрики раз на секунду в CSV")

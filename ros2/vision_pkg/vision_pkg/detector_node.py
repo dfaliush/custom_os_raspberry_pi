@@ -47,7 +47,9 @@ class DetectorNode(Node):
         super().__init__('detector_node')
         model_dir = self.declare_parameter('model_dir', '').value
         conf = self.declare_parameter('conf', 0.25).value
-        threads = self.declare_parameter('threads', 4).value
+        # 2, not 4: 4 ncnn threads powered the Pi 5 off (core current peaks
+        # of 9.2 A); see rpi5os_vision.run.
+        threads = self.declare_parameter('threads', 2).value
         self.target_class = self.declare_parameter('target_class', '').value
         port = self.declare_parameter('stream_port', 8000).value
 

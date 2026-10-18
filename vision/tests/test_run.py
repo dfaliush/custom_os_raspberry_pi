@@ -17,6 +17,12 @@ DATA = str(HERE / "data")
 FAKE = str(HERE / "fake_rpicam.py")
 
 
+def test_default_threads_is_2():
+    # 4 ncnn threads drew 9.2 A core-current peaks on the Pi 5 and powered it
+    # off under load; 2 threads peak at 5.7 A at ~28 fps.
+    assert run.parse([]).threads == 2
+
+
 def test_run_on_files_writes_csv(tmp_path):
     out = tmp_path / "perf.csv"
     assert run.main(["--model", MODEL, "--source", DATA, "--frames", "1", "--csv", str(out)]) == 0
