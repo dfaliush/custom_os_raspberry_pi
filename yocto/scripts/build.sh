@@ -72,10 +72,16 @@ checkout "$LAYERS/meta-openembedded" https://github.com/openembedded/meta-openem
 checkout "$LAYERS/meta-ros" https://github.com/ros/meta-ros.git "$ROS_REV"
 
 # Our layers and the ROS 2 sources copied to ext4 with explicit modes: drvfs
-# reports arbitrary ones.
-rsync -a --delete --no-perms --chmod=D755,F644 "$SRC/meta-rpi5os/" "$LAYERS/meta-rpi5os/"
-rsync -a --delete --no-perms --chmod=D755,F644 "$SRC/meta-rpi5os-ros/" "$LAYERS/meta-rpi5os-ros/"
-rsync -a --delete --no-perms --chmod=D755,F644 --exclude __pycache__ "$REPO/ros2/" "$WORK/ros2/"
+# reports arbitrary ones. Not their mtimes either: those come from the Windows
+# clock, and a file a few seconds "in the future" makes ninja loop
+# ("build.ninja still dirty"). --checksum keeps unchanged files untouched.
+COPY=(rsync -a --no-times --checksum --delete --no-perms --chmod=D755,F644)
+"${COPY[@]}" "$SRC/meta-rpi5os/" "$LAYERS/meta-rpi5os/"
+"${COPY[@]}" "$SRC/meta-rpi5os-ros/" "$LAYERS/meta-rpi5os-ros/"
+"${COPY[@]}" --exclude __pycache__ "$REPO/ros2/" "$WORK/ros2/"
+# vision/: the package and the model the Pi uses; not the PC-only parts.
+"${COPY[@]}" --exclude __pycache__ --exclude tests --exclude train \
+	--include 'models/current/***' --exclude 'models/*' "$REPO/vision/" "$WORK/vision/"
 
 # C++ in ROS (Fast DDS, rcl, rclpy bindings) at -j<nproc> runs out of memory on
 # small hosts: about 2 GB per job is safe.
@@ -93,6 +99,7 @@ BBLAYERS = " \\
     $LAYERS/meta-raspberrypi \\
     $LAYERS/meta-openembedded/meta-oe \\
     $LAYERS/meta-openembedded/meta-python \\
+    $LAYERS/meta-openembedded/meta-multimedia \\
     $LAYERS/meta-ros/meta-ros-common \\
     $LAYERS/meta-ros/meta-ros2 \\
     $LAYERS/meta-ros/meta-ros2-jazzy \\
@@ -109,12 +116,13 @@ SSTATE_DIR = "$WORK/sstate"
 BB_HASHSERVE_DB_DIR = "\${SSTATE_DIR}"
 INHERIT += "rm_work"
 # Keep the image's rootfs and our ROS package in tmp/work for inspection.
-RM_WORK_EXCLUDE += "rpi5os-image counter-pkg"
+RM_WORK_EXCLUDE += "rpi5os-image counter-pkg rpi5os-vision vision-pkg vision-interfaces"
 BB_NUMBER_THREADS = "$JOBS"
 PARALLEL_MAKE = "-j$JOBS"
 # ROS 2: distro and where counter_pkg's sources are (meta-rpi5os-ros).
 ROS_DISTRO = "jazzy"
 RPI5OS_ROS2_SRC = "$WORK/ros2"
+RPI5OS_VISION_SRC = "$WORK/vision"
 # meta-ros recipes name licenses that are not in oe-core's common-licenses
 # (meta-ros's kas configs drop this check too).
 ERROR_QA:remove = "license-exists"

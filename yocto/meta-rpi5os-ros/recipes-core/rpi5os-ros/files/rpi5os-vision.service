@@ -1,0 +1,16 @@
+[Unit]
+Description=rpi5os: camera, YOLO detector and decision ROS 2 nodes (vision_pkg)
+After=network.target
+
+[Service]
+Type=simple
+Environment=FASTDDS_BUILTIN_TRANSPORTS=UDPv4
+# rcl needs HOME for its log dir (see rpi5os-counter.service).
+Environment=HOME=/root
+ExecStart=/bin/sh -c '. /opt/ros/@ROS_DISTRO@/setup.sh && exec ros2 launch vision_pkg vision.launch.py'
+# ros2 launch exits 0 once all its nodes have died: on-failure would not restart.
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

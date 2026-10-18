@@ -1,5 +1,6 @@
 # ROS 2 Jazzy on top of rpi5os-image: runtime, CLI, the official Python demo
-# nodes and our counter nodes. Everything lands in /opt/ros/jazzy, as on Ubuntu.
+# nodes, our counter nodes and the vision stack (camera, ncnn detector,
+# vision_pkg nodes). ROS lands in /opt/ros/jazzy, as on Ubuntu.
 IMAGE_INSTALL:append = " \
     ros-workspace ros-environment \
     rclpy rmw-implementation rmw-fastrtps-cpp \
@@ -8,4 +9,7 @@ IMAGE_INSTALL:append = " \
     demo-nodes-py \
     counter-pkg \
     rpi5os-ros \
+    libcamera-apps \
+    rpi5os-vision \
+    vision-interfaces vision-pkg \
 "
