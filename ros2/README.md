@@ -114,3 +114,64 @@ ros2 service call /counter_publisher/enable std_srvs/srv/SetBool "{data: false}"
 ros2 service call /counter_publisher/enable std_srvs/srv/SetBool "{data: true}"
 # response: std_srvs.srv.SetBool_Response(success=True, message='counter started at 8')
 ```
+
+## vision_pkg: камера → детектор → рішення
+
+Ускладнений рівень завдання: відео передається між нодами, детектор визначає
+положення предмета відносно центру кадру, окрема нода приймає рішення.
+Детектор — пакет `rpi5os_vision` з `vision/` (YOLO11n у форматі NCNN).
+
+```text
+camera_node ──/camera/image_raw──► detector_node ──/target──► decision_node ──► /cmd_vel, /decision
+              sensor_msgs/Image              vision_interfaces/TargetOffset     Twist, String
+              bgr8 640×480, best effort      detected, confidence, dx, dy, area, class_name
+```
+
+| Нода | Параметри (типово) | Що робить |
+| --- | --- | --- |
+| `camera_node` | `source` (`camera`), `width` 640, `height` 480, `fps` 30, `loop` (`true`) | `rpicam-vid` або тека зображень/відео → `/camera/image_raw`; камера відпала — повтор раз на 2 с |
+| `detector_node` | `model_dir` (`''`), `target_class` (`''` — будь-який), `conf` 0.25, `stream_port` 8000 | найсвіжіший кадр → YOLO → `/target` на кожен кадр; MJPEG з рамками на порту |
+| `decision_node` | `conf_threshold` 0.6, `deadband` 0.15, `stale_timeout` 0.5, `rate` 10.0, `forward_speed` 0.2, `turn_speed` 0.5 | 10 Гц, незалежно від камери: STOP / TURN_LEFT / TURN_RIGHT / MOVE_FORWARD |
+
+`dx`, `dy` у `[-1, 1]`: −1 — лівий/верхній край кадру, 0 — центр, +1 —
+правий/нижній край. Рішення (`vision_pkg/decision.py`, тести —
+`test/test_decision.py`):
+
+| Умова | `/decision` | `/cmd_vel` |
+| --- | --- | --- |
+| `/target` не приходить довше `stale_timeout` (камера, детектор) | STOP | 0 |
+| предмета немає або `confidence < conf_threshold` | STOP | 0 |
+| `dx < −deadband` | TURN_LEFT | `angular.z = +turn_speed` |
+| `dx > +deadband` | TURN_RIGHT | `angular.z = −turn_speed` |
+| інакше | MOVE_FORWARD | `linear.x = forward_speed` |
+
+Моторів немає: `/cmd_vel` публікується для контролера, якого в проєкті немає.
+
+### Збірка і запуск на ПК (без камери)
+
+`rpi5os_vision` береться з репо через `PYTHONPATH` (залежності — `vision/README.md`):
+
+```bash
+ln -sfn /mnt/d/git/custom_os_raspberry_pi/ros2/vision_interfaces ~/ros2_ws/src/
+ln -sfn /mnt/d/git/custom_os_raspberry_pi/ros2/vision_pkg ~/ros2_ws/src/
+cd ~/ros2_ws && colcon build --packages-select vision_interfaces vision_pkg
+export PYTHONPATH=/mnt/d/git/custom_os_raspberry_pi/vision:$PYTHONPATH
+colcon test --packages-select vision_pkg && colcon test-result     # 20 tests, 0 failures
+source install/setup.bash
+R=/mnt/d/git/custom_os_raspberry_pi/vision
+ros2 launch vision_pkg vision.launch.py source:=$R/tests/data model_dir:=$R/models/coco-yolo11n target_class:=bus
+```
+
+`source:=<тека>` крутить зображення по колу замість камери. В іншому терміналі:
+
+```bash
+ros2 node list                    # /camera_node /decision_node /detector_node
+ros2 topic echo /target --once    # detected: true, confidence: 0.90, dx: 0.02, class_name: bus
+ros2 topic hz /decision           # average rate: 10.000
+ros2 topic echo /decision         # data: MOVE_FORWARD
+pkill -f lib/vision_pkg/detector_node   # через ~0.5 с: data: STOP
+```
+
+Перевірено в WSL: `/camera/image_raw` 29 Гц, детектор 27 fps (16 мс на кадр),
+`/decision` 10 Гц; після `pkill` детектора STOP за 0,57 с (`stale_timeout`
+0,5 с + один такт 10 Гц).
