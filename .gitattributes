@@ -1,2 +1,8 @@
 # Everything here runs on Linux (WSL, Buildroot, Pi): LF regardless of core.autocrlf.
 * text eol=lf
+# Binary: models, images, video.
+*.bin binary
+*.param -text
+*.jpg binary
+*.png binary
+*.mp4 binary
