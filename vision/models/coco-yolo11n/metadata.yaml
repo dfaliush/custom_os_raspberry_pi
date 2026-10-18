@@ -1,4 +1,4 @@
-description: Ultralytics YOLO11n model trained on /usr/src/ultralytics/ultralytics/cfg/datasets/coco.yaml
+description: Ultralytics YOLO11n model trained on datasets/coco.yaml
 author: Ultralytics
 date: '2026-10-18T17:13:16.778339+00:00'
 version: 8.4.182

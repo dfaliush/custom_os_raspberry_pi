@@ -1,4 +1,4 @@
-description: Ultralytics YOLO11n model trained on /home/dmytro/vision-work/datasets/duck-v1/data.yaml
+description: Ultralytics YOLO11n model trained on duck-v1/data.yaml
 author: Ultralytics
 date: '2026-10-18T17:19:34.204312+00:00'
 version: 8.4.182

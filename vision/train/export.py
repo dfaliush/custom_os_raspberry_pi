@@ -7,10 +7,20 @@
 files rpi5os_vision needs: model.ncnn.param, model.ncnn.bin, metadata.yaml.
 """
 import argparse
+import re
 import shutil
 from pathlib import Path
 
 FILES = ("model.ncnn.param", "model.ncnn.bin", "metadata.yaml")
+
+# Ultralytics writes the dataset's absolute path into the description; it
+# carries the user name, and the rpi5os image is public (its rootfs check fails).
+ABS_PATH = re.compile(r"(?<![\w.])/(?:[^/\s]+/)+([^/\s]+/[^/\s]+)")
+
+
+def clean_metadata(text):
+    """Absolute paths → their last two components (…/duck-v1/data.yaml → duck-v1/data.yaml)."""
+    return ABS_PATH.sub(r"\1", text)
 
 
 def main(argv=None):
@@ -30,8 +40,9 @@ def main(argv=None):
     if a.out:
         out = Path(a.out)
         out.mkdir(parents=True, exist_ok=True)
-        for f in FILES:
+        for f in FILES[:2]:
             shutil.copy2(path / f, out / f)
+        (out / FILES[2]).write_text(clean_metadata((path / FILES[2]).read_text()))
         print(f"скопійовано в {out}")
 
 
