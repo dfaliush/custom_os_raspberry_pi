@@ -24,12 +24,12 @@ import threading
 import rclpy
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
-from rclpy.qos import qos_profile_sensor_data
 from rpi5os_vision.camera import CameraLost, RpicamSource
 from rpi5os_vision.source import FileSource, SourceEnded
 from sensor_msgs.msg import Image
 
 from .image import to_msg
+from .qos import latest_frame_qos
 
 RETRY = 2.0
 
@@ -45,7 +45,7 @@ class CameraNode(Node):
         self.fps = self.declare_parameter('fps', 30).value
         self.loop = self.declare_parameter('loop', True).value
         self.frame_id = self.declare_parameter('frame_id', 'camera').value
-        self.pub = self.create_publisher(Image, 'camera/image_raw', qos_profile_sensor_data)
+        self.pub = self.create_publisher(Image, 'camera/image_raw', latest_frame_qos())
         self.stopping = threading.Event()
         self.thread = threading.Thread(target=self._run, daemon=True)
         self.thread.start()

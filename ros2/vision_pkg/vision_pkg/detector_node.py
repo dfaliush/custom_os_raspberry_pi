@@ -16,7 +16,8 @@ detector_node: camera/image_raw -> YOLO (NCNN) -> target (vision_interfaces/Targ
 
 Perception only: where the target is relative to the frame center. Every
 processed frame yields one /target, detected or not; what to do about it is
-decision_node's job. The subscription keeps one frame (best effort), so a
+decision_node's job. The subscription keeps one frame (best effort, depth 1;
+see qos.latest_frame_qos), so a
 slow detector skips frames instead of lagging. stream_port > 0 serves the
 annotated frames as MJPEG.
 """
@@ -27,7 +28,6 @@ import time
 import rclpy
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
-from rclpy.qos import qos_profile_sensor_data
 from rpi5os_vision.geometry import target_from
 from rpi5os_vision.model import locate, ModelNotFound, validate_class
 from rpi5os_vision.stream import annotate, MjpegServer
@@ -36,6 +36,7 @@ from sensor_msgs.msg import Image
 from vision_interfaces.msg import TargetOffset
 
 from .image import from_msg
+from .qos import latest_frame_qos
 
 LOG_EVERY = 5.0
 
@@ -58,7 +59,7 @@ class DetectorNode(Node):
         self.det = Detector(info, conf=conf, threads=threads)
         self.pub = self.create_publisher(TargetOffset, 'target', 10)
         self.create_subscription(
-            Image, 'camera/image_raw', self._on_image, qos_profile_sensor_data)
+            Image, 'camera/image_raw', self._on_image, latest_frame_qos())
         self.stream = MjpegServer(port).start() if port else None
         self.frames, self.infer, self.t0 = 0, 0.0, time.monotonic()
         self.get_logger().info(
