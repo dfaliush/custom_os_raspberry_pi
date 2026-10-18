@@ -1,0 +1,195 @@
+#!/usr/bin/env bash
+#
+# cam stream|photo|video [SEC]|stop|status: IMX219 camera on Raspberry Pi OS.
+# Settings: cam.conf next to this script (~/camera/cam.conf after install.sh).
+#
+#   stream     → MJPEG to the browser, http://<host>.local:STREAM_PORT/ (background)
+#   photo      → one full-resolution JPEG into PHOTO_DIR
+#   video [N]  → H.264 .mp4 into VIDEO_DIR: N seconds, or in the background
+#                until `cam stop`; prints the fps measured from the file
+#   stop       → stop stream/video
+#   status     → what holds the camera now
+#
+# One mode at a time: libcamera gives the camera to a single process.
+
+set -euo pipefail
+
+CAM_HOME="$(dirname "$(readlink -f "$0")")"
+RUN="$CAM_HOME/run"
+[ -f "$CAM_HOME/cam.conf" ] || { echo "немає $CAM_HOME/cam.conf" >&2; exit 1; }
+# shellcheck source=cam.conf
+. "$CAM_HOME/cam.conf"
+mkdir -p "$RUN"
+
+usage() {
+	cat >&2 <<-EOF
+	cam stream      стрім у браузер: http://$(hostname).local:$STREAM_PORT/ (у фоні)
+	cam photo       фото ${PHOTO_WIDTH}x${PHOTO_HEIGHT} у $PHOTO_DIR
+	cam video [N]   відео ${VIDEO_WIDTH}x${VIDEO_HEIGHT} у $VIDEO_DIR: N секунд або до cam stop
+	cam stop        зупинити стрім або запис
+	cam status      що зараз тримає камеру
+	налаштування:   $CAM_HOME/cam.conf
+	EOF
+	exit 2
+}
+
+# Background job state: run/pid, run/mode, run/file (video only).
+running() {
+	[ -f "$RUN/pid" ] && kill -0 "$(cat "$RUN/pid")" 2>/dev/null
+}
+
+clear_state() { rm -f "$RUN/pid" "$RUN/mode" "$RUN/file"; }
+
+others() { pgrep -a '^rpicam-' || true; }
+
+need_free_camera() {
+	if running; then
+		echo "камера зайнята: cam $(cat "$RUN/mode") (pid $(cat "$RUN/pid")). Зупини: cam stop" >&2
+		exit 1
+	fi
+	clear_state
+	local o; o="$(others)"
+	if [ -n "$o" ]; then
+		echo "камера зайнята іншим процесом (не cam):" >&2
+		echo "$o" >&2
+		exit 1
+	fi
+}
+
+# start_bg MODE CMD...: own session, so `cam stop` signals the whole group.
+start_bg() {
+	local mode="$1"; shift
+	setsid "$@" > "$RUN/$mode.log" 2>&1 < /dev/null &
+	echo $! > "$RUN/pid"
+	echo "$mode" > "$RUN/mode"
+}
+
+stamp() { date +%Y%m%d-%H%M%S; }
+
+report_video() {
+	local f="$1" n d
+	[ -s "$f" ] || { echo "відео не записалось, лог: $RUN/video.log" >&2; tail -5 "$RUN/video.log" >&2; return 1; }
+	n="$(ffprobe -v error -select_streams v -count_frames -show_entries stream=nb_read_frames -of csv=p=0 "$f" | tr -d ,)"
+	d="$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$f")"
+	echo "відео: $f"
+	awk -v n="$n" -v d="$d" -v s="$(du -h "$f" | cut -f1)" -v w="$VIDEO_WIDTH" -v h="$VIDEO_HEIGHT" \
+		'BEGIN { printf "  %sx%s, %d кадрів за %.2f с = %.1f fps (виміряно з файлу), %s\n", w, h, n, d, (d > 0 ? n / d : 0), s }'
+}
+
+video_cmd() {
+	VIDEO_CMD=(rpicam-vid -n -t "$1" --mode "$SENSOR_MODE" \
+		--width "$VIDEO_WIDTH" --height "$VIDEO_HEIGHT" --framerate "$VIDEO_FPS" \
+		--codec libav -b "$VIDEO_BITRATE" -o "$2")
+}
+
+cmd_stream() {
+	need_free_camera
+	start_bg stream python3 "$CAM_HOME/cam_stream.py" --port "$STREAM_PORT" --mode "$SENSOR_MODE" \
+		--width "$STREAM_WIDTH" --height "$STREAM_HEIGHT" --fps "$STREAM_FPS" --quality "$STREAM_QUALITY"
+	for _ in $(seq 50); do
+		grep -q '^ready' "$RUN/stream.log" 2>/dev/null && break
+		running || break
+		sleep 0.2
+	done
+	if ! grep -q '^ready' "$RUN/stream.log" 2>/dev/null; then
+		echo "стрім не запустився, лог: $RUN/stream.log" >&2
+		grep -v -E '^\[|^ +|Mode selection|Stream configuration' "$RUN/stream.log" | tail -5 >&2
+		cmd_stop > /dev/null
+		exit 1
+	fi
+	echo "стрім: http://$(hostname).local:$STREAM_PORT/ (${STREAM_WIDTH}x${STREAM_HEIGHT}, до ${STREAM_FPS} fps)"
+	echo "зупинити: cam stop"
+}
+
+cmd_photo() {
+	need_free_camera
+	mkdir -p "$PHOTO_DIR"
+	local f; f="$PHOTO_DIR/$(stamp).jpg"
+	if ! rpicam-still -n -t "$PHOTO_WAIT_MS" --width "$PHOTO_WIDTH" --height "$PHOTO_HEIGHT" \
+		-q "$PHOTO_QUALITY" -o "$f" > "$RUN/photo.log" 2>&1; then
+		echo "фото не вдалось, лог: $RUN/photo.log" >&2
+		tail -3 "$RUN/photo.log" >&2
+		exit 1
+	fi
+	echo "фото: $f (${PHOTO_WIDTH}x${PHOTO_HEIGHT}, $(du -h "$f" | cut -f1))"
+}
+
+cmd_video() {
+	local sec="${1:-}"
+	[ -z "$sec" ] || [[ "$sec" =~ ^[0-9]+$ && "$sec" -gt 0 ]] || { echo "тривалість — ціле число секунд" >&2; exit 2; }
+	need_free_camera
+	mkdir -p "$VIDEO_DIR"
+	local f; f="$VIDEO_DIR/$(stamp).mp4"
+	if [ -z "$sec" ]; then
+		video_cmd 0 "$f"
+		start_bg video "${VIDEO_CMD[@]}"
+		echo "$f" > "$RUN/file"
+		sleep 2
+		running || { report_video "$f"; clear_state; exit 1; }
+		echo "запис: $f (${VIDEO_WIDTH}x${VIDEO_HEIGHT}, до ${VIDEO_FPS} fps)"
+		echo "зупинити: cam stop"
+		return
+	fi
+	echo "запис ${sec} с: $f (Ctrl+C — зупинити раніше)"
+	# Ctrl+C reaches rpicam-vid, which closes the .mp4 properly; the shell
+	# only has to survive it to print the report.
+	trap 'true' INT
+	video_cmd "$((sec * 1000))" "$f"
+	"${VIDEO_CMD[@]}" > "$RUN/video.log" 2>&1 || true
+	trap - INT
+	report_video "$f"
+}
+
+cmd_stop() {
+	if ! running; then
+		clear_state
+		echo "cam нічого не запускав"
+		local o; o="$(others)"
+		[ -z "$o" ] || { echo "камеру тримає інший процес (не cam):"; echo "$o"; }
+		return 0
+	fi
+	local pid mode; pid="$(cat "$RUN/pid")"; mode="$(cat "$RUN/mode")"
+	# SIGINT to the session: rpicam-vid finishes the .mp4, python exits.
+	kill -INT -- "-$pid" 2>/dev/null || kill -INT "$pid"
+	for _ in $(seq 50); do
+		kill -0 "$pid" 2>/dev/null || break
+		sleep 0.2
+	done
+	if kill -0 "$pid" 2>/dev/null; then
+		kill -KILL -- "-$pid" 2>/dev/null || kill -KILL "$pid"
+		echo "cam $mode не зупинився за 10 с — вбито"
+	fi
+	echo "зупинено: cam $mode"
+	[ "$mode" != video ] || report_video "$(cat "$RUN/file")" || true
+	clear_state
+}
+
+cmd_status() {
+	if running; then
+		local pid mode; pid="$(cat "$RUN/pid")"; mode="$(cat "$RUN/mode")"
+		echo "працює: cam $mode (pid $pid, з $(ps -o lstart= -p "$pid"))"
+		case "$mode" in
+			stream)
+				echo "  http://$(hostname).local:$STREAM_PORT/"
+				curl -s --max-time 2 "http://127.0.0.1:$STREAM_PORT/stats" |
+					python3 -c 'import json,sys; s=json.load(sys.stdin); print("  камера %.1f fps (виміряно), %.1f Мбіт/с" % (s["camera_fps"], s["mbit"]) if s["camera_fps"] else "  fps ще вимірюється, спробуй за секунду")' ||
+					true
+				;;
+			video) echo "  $(cat "$RUN/file") ($(du -h "$(cat "$RUN/file")" | cut -f1))" ;;
+		esac
+		return 0
+	fi
+	clear_state
+	local o; o="$(others)"
+	if [ -n "$o" ]; then echo "cam нічого не запускав, але камеру тримає:"; echo "$o"
+	else echo "камера вільна"; fi
+}
+
+case "${1:-}" in
+	stream) cmd_stream ;;
+	photo)  cmd_photo ;;
+	video)  cmd_video "${2:-}" ;;
+	stop)   cmd_stop ;;
+	status) cmd_status ;;
+	*)      usage ;;
+esac
