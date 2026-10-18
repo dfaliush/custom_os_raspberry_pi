@@ -12,7 +12,7 @@ from rpi5os_vision.metrics import CSV_FIELDS, PerfMeter, format_line
 from rpi5os_vision.stream import MjpegServer, annotate
 
 HERE = Path(__file__).parent
-MODEL = str(HERE.parent / "models" / "current")
+MODEL = str(HERE.parent / "models" / "coco-yolo11n")
 DATA = str(HERE / "data")
 FAKE = str(HERE / "fake_rpicam.py")
 

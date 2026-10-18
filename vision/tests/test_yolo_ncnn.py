@@ -8,7 +8,7 @@ from rpi5os_vision.model import locate
 from rpi5os_vision.yolo_ncnn import Detector, decode, letterbox, nms
 
 HERE = Path(__file__).parent
-MODEL = HERE.parent / "models" / "current"
+MODEL = HERE.parent / "models" / "coco-yolo11n"
 
 
 def test_letterbox_shape_and_scale():
