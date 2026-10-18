@@ -412,6 +412,41 @@ rpi5os-image`. Образ:
 systemd, локаль для bitbake), і результати T1–T7 на залізі — у spec, розділи
 «Знайдено під час реалізації» і «Результати на залізі».
 
+## Розпізнавання об'єкта камерою (rpi5os 1.2.0)
+
+Власна модель YOLO11n (NCNN) знаходить предмет (`duck_pirate`) у кадрі камери
+IMX219, рахує його положення відносно центру кадру, а ROS 2 нода приймає
+рішення ліво/право/вперед/стоп. Дизайн:
+[`docs/specs/2026-10-18-vision-design.md`](docs/specs/2026-10-18-vision-design.md).
+
+| Рівень | Де | Як запустити | Подробиці |
+| --- | --- | --- | --- |
+| базовий | Raspberry Pi OS (SSD) | `cam stop`, потім `~/venv/bin/python -m rpi5os_vision.run --model models/current --target-class duck_pirate --stream 8000` у `~/vision` | [`vision/README.md`](vision/README.md) |
+| просунутий | rpi5os 1.2.0 на SD | `sudo systemctl stop rpi5os-vision`, потім `rpi5os-detect --target-class duck_pirate --stream 8000` | там само |
+| ускладнений | rpi5os 1.2.0 на SD | нічого: `rpi5os-vision.service` стартує сам | [`ros2/README.md`](ros2/README.md) |
+
+В усіх трьох випадках картинка з рамками — `http://<pi>.local:8000/`.
+Рішення наживо на SD:
+`ssh user@rpi5os-yocto.local 'journalctl -u rpi5os-vision -f | grep decision_node'`
+→ `TURN_LEFT (dx=-0.30 conf=0.83)`, `STOP (no target)`. Модель і її
+тренування (Label Studio → YOLO11n → NCNN): [`vision/train/README.md`](vision/train/README.md).
+
+**Нова модель без перепрошивки.** Три файли (`model.ncnn.param`,
+`model.ncnn.bin`, `metadata.yaml`) у `/var/lib/rpi5os-vision/model/` на SD і
+`sudo systemctl restart rpi5os-vision`: ця тека має пріоритет над моделлю в
+образі (`/usr/share/rpi5os-vision/model/`).
+
+Перевірено на стенді:
+
+| Перевірка | Результат |
+| --- | --- |
+| камера в Yocto (`rpicam-hello --list-cameras`) | `imx219 [3280x2464 10-bit RGGB]`, режими до 640×480@200 |
+| ROS: `/camera/image_raw`, `/decision` | 23 Гц, 10 Гц; детектор 25 fps, 31 мс на кадр |
+| качка по центру / ліворуч / праворуч | `MOVE_FORWARD` / `TURN_LEFT` / `TURN_RIGHT` |
+| качку прибрали; впевненість < 0,6 | `STOP` |
+| `kill` детектора | STOP за ~0,6 с (`stale_timeout` 0,5 с + такт 10 Гц), нода знову за 2 с (`respawn`) |
+| Raspberry Pi OS, 15 хв зі стрімом у браузері | без вимкнень, пік струму ядра 6 А |
+
 ## Камера IMX219 (якщо підключена)
 
 Команда `cam` для Raspberry Pi OS (не для образу rpi5os): відео з камери в
@@ -534,10 +569,14 @@ custom_os_raspberry_pi/
 ├─ docs/specs/                    # дизайн обох ітерацій
 ├─ docs/2026-10-08-ros2-build-guide.md   # ROS 2: усі кроки збірки по порядку
 ├─ docs/2026-10-08-continue-build.md     # як продовжити збірку на іншому ПК
+├─ vision/                        # розпізнавання: rpi5os_vision (Pi), models/, train/ (ПК), див. vision/README.md
 ├─ ros2/counter_pkg/              # ROS 2 Jazzy: publisher/subscriber лічильника, див. ros2/README.md
+├─ ros2/vision_interfaces/        # повідомлення TargetOffset
+├─ ros2/vision_pkg/               # camera_node → detector_node → decision_node
 ├─ yocto/                         # ітерація 2, див. «Yocto-образ»
 │  ├─ meta-rpi5os/                # шар: distro rpi5os, rpi5os-image, скрипти, systemd units, panic=10 + watchdog
-│  ├─ meta-rpi5os-ros/            # шар ROS 2: рецепт counter-pkg, bbappend образу, rpi5os-counter.service
+│  ├─ meta-rpi5os-ros/            # шар ROS 2 і камери: counter-pkg, vision-*, ncnn, rpi5os-vision,
+│  │                              #   libcamera (форк Raspberry Pi), rpicam-apps, overlay imx219, сервіси
 │  ├─ layers/                     # submodules: meta-openembedded, meta-ros (гілка wrynose)
 │  └─ scripts/build.sh, dist.sh   # WSL: від нуля до .wic і артефакти релізу
 └─ buildroot/                     # BR2_EXTERNAL, name: RPI5OS
@@ -613,6 +652,22 @@ wsl -d Ubuntu -- bash buildroot/scripts/dist.sh
   без роутера Pi лишилась би на SD недосяжною. Тепер link-local не рахується.
   Перевірено на залізі: з `psk="wrong"` відкат на SSD через ~200 с, у лог
   записано `wpa_state=SCANNING`.
+- **Upstream libcamera не бачить камеру Pi 5 на ядрі Raspberry Pi.** Ядро
+  бачить `imx219`, а libcamera 0.6.0 з `meta-multimedia` пише `No cameras
+  available`: у `cam -l` з `LIBCAMERA_LOG_LEVELS=*:DEBUG` видно `Unable to
+  acquire a CFE instance`. Сутності `rp1-cfe` у ядрі Raspberry Pi мають інші
+  імена (`rp1-cfe-fe_image0` замість `rp1-cfe-fe-image0`), а з виправленими
+  іменами libcamera падає на зв'язках. Береться форк
+  `github.com/raspberrypi/libcamera` `v0.6.0+rpt20251202`, як у Raspberry Pi OS.
+- **`/dev/dma_heap/*` лише для root** — libcamera від користувача: `Could not
+  open any dmaHeap device`. Правило udev (група `video`, `0660`) і
+  `userconf.txt`-користувач у групі `video`, як у Raspberry Pi OS.
+- **Pi 5 вимикався під детектором** (червоний LED, жодних попереджень, 5 В і
+  температура в нормі): ncnn на 4 потоках давав піки струму ядра 9,2 А (PMIC,
+  `vcgencmd pmic_read_adc`). Типово 2 потоки: пік 5,7 А, 28 fps.
+- **Годинник Windows на 17 с попереду WSL**: файли, змінені на `D:`, були «з
+  майбутнього», і `ninja` зациклювався (`build.ninja still dirty`). `build.sh`
+  копіює шари без часу файлів.
 
 ## Записати свою збірку з ПК прямо на Pi (розробка)
 
